@@ -18,6 +18,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
 import { changeLanguage, availableLanguages, getCurrentLanguage } from '../../i18n';
+import api from '../../utils/api';
 
 export default function SettingsScreen() {
   const { t } = useTranslation();
@@ -29,6 +30,9 @@ export default function SettingsScreen() {
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const [invitationModalVisible, setInvitationModalVisible] = useState(false);
+  const [inviteCode, setInviteCode] = useState('');
+  const [acceptingInvite, setAcceptingInvite] = useState(false);
 
   const handleLogout = () => {
     Alert.alert(
@@ -59,6 +63,29 @@ export default function SettingsScreen() {
       setDeleting(false);
       setDeletePassword('');
       setDeleteModalVisible(false);
+    }
+  };
+
+  const handleAcceptInvitation = async () => {
+    if (!inviteCode.trim()) {
+      Alert.alert('Error', 'Ingresa el código de invitación');
+      return;
+    }
+    setAcceptingInvite(true);
+    try {
+      const response = await api.post('/caregivers/accept-invitation', {
+        code: inviteCode.trim().toUpperCase(),
+      });
+      Alert.alert(
+        '¡Bienvenido!',
+        `¡Ahora eres cuidador de ${response.data.patient_name}!`,
+        [{ text: 'Genial', onPress: () => { setInvitationModalVisible(false); setInviteCode(''); } }]
+      );
+    } catch (error: any) {
+      const msg = error.response?.data?.detail || 'No se pudo aceptar la invitación';
+      Alert.alert('Error', msg);
+    } finally {
+      setAcceptingInvite(false);
     }
   };
 
@@ -206,6 +233,15 @@ export default function SettingsScreen() {
         {/* Sección de Cuenta */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('settings.account')}</Text>
+
+          <MenuItem
+            icon="mail"
+            title="Aceptar Invitación"
+            subtitle="Ingresa un código para unirte como cuidador"
+            onPress={() => setInvitationModalVisible(true)}
+            iconBg="#E3F2FD"
+            iconColor="#2196F3"
+          />
 
           <MenuItem
             icon="log-out"
@@ -453,6 +489,68 @@ export default function SettingsScreen() {
                   )}
                 </TouchableOpacity>
               ))}
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal Aceptar Invitación */}
+      <Modal
+        visible={invitationModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setInvitationModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Aceptar Invitación</Text>
+              <TouchableOpacity
+                onPress={() => { setInvitationModalVisible(false); setInviteCode(''); }}
+                style={styles.closeButton}
+              >
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalBody}>
+              <View style={styles.inviteIconBox}>
+                <Ionicons name="mail-open" size={40} color="#2196F3" />
+              </View>
+              <Text style={styles.inviteDescription}>
+                Ingresa el código de 6 dígitos que recibiste por email para unirte como cuidador de un paciente.
+              </Text>
+
+              <TextInput
+                style={styles.inviteCodeInput}
+                value={inviteCode}
+                onChangeText={(text) => setInviteCode(text.toUpperCase())}
+                placeholder="ABC123"
+                placeholderTextColor="#bbb"
+                maxLength={6}
+                autoCapitalize="characters"
+                keyboardType="default"
+                autoCorrect={false}
+              />
+
+              <TouchableOpacity
+                style={[styles.inviteAcceptButton, acceptingInvite && { opacity: 0.7 }]}
+                onPress={handleAcceptInvitation}
+                disabled={acceptingInvite}
+              >
+                {acceptingInvite ? (
+                  <ActivityIndicator color="white" />
+                ) : (
+                  <Text style={styles.inviteAcceptButtonText}>Aceptar</Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.inviteCancelButton}
+                onPress={() => { setInvitationModalVisible(false); setInviteCode(''); }}
+              >
+                <Text style={styles.inviteCancelButtonText}>Cancelar</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -806,6 +904,56 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     marginBottom: 8,
     textAlign: 'center',
+  },
+  // Invite acceptance modal styles
+  inviteIconBox: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  inviteDescription: {
+    fontSize: 14,
+    color: '#666',
+    lineHeight: 22,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  inviteCodeInput: {
+    borderWidth: 2,
+    borderColor: '#2196F3',
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    fontSize: 28,
+    fontWeight: '700',
+    letterSpacing: 8,
+    textAlign: 'center',
+    color: '#1565C0',
+    backgroundColor: '#E3F2FD',
+    marginBottom: 20,
+  },
+  inviteAcceptButton: {
+    backgroundColor: '#2196F3',
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  inviteAcceptButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: 'white',
+  },
+  inviteCancelButton: {
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#ccc',
+  },
+  inviteCancelButtonText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#666',
   },
   // Delete account modal styles
   deleteWarningBox: {

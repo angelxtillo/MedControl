@@ -14,6 +14,10 @@ from jose import JWTError, jwt
 from bson import ObjectId
 import time
 from collections import defaultdict
+import sendgrid
+from sendgrid.helpers.mail import Mail
+import random
+import string
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -28,6 +32,8 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security = HTTPBearer()
 JWT_SECRET = os.environ.get('JWT_SECRET', 'your-secret-key')
 ALGORITHM = "HS256"
+SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY", "")
+SENDGRID_FROM_EMAIL = os.environ.get("SENDGRID_FROM_EMAIL", "")
 
 # Rate limiting (simple in-memory)
 rate_limit_store = defaultdict(list)
@@ -97,6 +103,13 @@ class Patient(BaseModel):
 class InviteCaregiverRequest(BaseModel):
     patient_id: str
     email: str
+
+class CaregiverInvitation(BaseModel):
+    patient_id: str
+    invitee_email: str
+
+class AcceptInvitation(BaseModel):
+    code: str
 
 class RemoveCaregiverRequest(BaseModel):
     patient_id: str
@@ -223,6 +236,58 @@ def should_show_today(med: dict, weekday: int) -> bool:
         if day_name in frequency and day_num == weekday:
             return True
     return False
+
+# ============= INVITATION HELPERS =============
+def generate_invitation_code() -> str:
+    chars = string.ascii_uppercase + string.digits
+    return ''.join(random.choices(chars, k=6))
+
+async def send_invitation_email(
+    to_email: str,
+    inviter_name: str,
+    patient_name: str,
+    code: str
+) -> bool:
+    try:
+        sg = sendgrid.SendGridAPIClient(api_key=SENDGRID_API_KEY)
+        html_content = f"""
+        <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px;">
+          <div style="background: #2196F3; padding: 20px; border-radius: 12px 12px 0 0; text-align: center;">
+            <h1 style="color: white; margin: 0;">&#128138; MedControl</h1>
+          </div>
+          <div style="background: #f9f9f9; padding: 24px; border-radius: 0 0 12px 12px;">
+            <h2 style="color: #212121;">Te han invitado como cuidador</h2>
+            <p style="color: #666;">
+              <strong>{inviter_name}</strong> te ha invitado a ser
+              cuidador de <strong>{patient_name}</strong> en MedControl.
+            </p>
+            <p style="color: #666;">Para aceptar la invitación:</p>
+            <ol style="color: #666;">
+              <li>Descarga MedControl desde Play Store</li>
+              <li>Crea tu cuenta o inicia sesión</li>
+              <li>Ve a Ajustes &rarr; Aceptar invitación</li>
+              <li>Ingresa este código:</li>
+            </ol>
+            <div style="background: #E3F2FD; border: 2px dashed #2196F3; border-radius: 12px; padding: 20px; text-align: center; margin: 20px 0;">
+              <p style="color: #666; margin: 0 0 8px 0; font-size: 14px;">Tu código de invitación</p>
+              <h1 style="color: #1565C0; margin: 0; font-size: 36px; letter-spacing: 8px;">{code}</h1>
+            </div>
+            <p style="color: #999; font-size: 12px; text-align: center;">Este código expira en 48 horas.</p>
+            <p style="color: #999; font-size: 12px; text-align: center;">Si no esperabas esta invitación, puedes ignorar este email.</p>
+          </div>
+        </div>
+        """
+        message = Mail(
+            from_email=SENDGRID_FROM_EMAIL,
+            to_emails=to_email,
+            subject=f"MedControl: {inviter_name} te invita a cuidar a {patient_name}",
+            html_content=html_content
+        )
+        response = sg.send(message)
+        return response.status_code in [200, 202]
+    except Exception as e:
+        print(f"SendGrid error: {e}")
+        return False
 
 # ============= AUTH ENDPOINTS =============
 @api_router.post("/auth/register")
@@ -1028,6 +1093,134 @@ async def get_upcoming_dashboard(
         day_data["medications"].sort(key=lambda x: x["scheduled_time"])
 
     return [result_by_date[d] for d in sorted(result_by_date.keys())]
+
+# ============= INVITATION ENDPOINTS =============
+@api_router.post("/caregivers/invite")
+async def invite_caregiver_by_code(
+    invitation: CaregiverInvitation,
+    user_id: str = Depends(get_current_user)
+):
+    """Send invitation email with a 6-digit code"""
+    # Verify the inviter has access to the patient
+    patient = await db.patients.find_one({
+        "_id": ObjectId(invitation.patient_id),
+        "caregiver_ids": user_id
+    })
+    if not patient:
+        raise HTTPException(status_code=404, detail="Paciente no encontrado o sin acceso")
+
+    inviter = await db.caregivers.find_one({"_id": ObjectId(user_id)})
+    if not inviter:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    invitee_email = invitation.invitee_email.strip().lower()
+
+    # Cannot invite yourself
+    if invitee_email == inviter["email"].lower():
+        raise HTTPException(status_code=400, detail="No puedes invitarte a ti mismo")
+
+    # Check if invitee is already a caregiver
+    existing_caregiver = await db.caregivers.find_one({"email": invitee_email})
+    if existing_caregiver:
+        existing_id = str(existing_caregiver["_id"])
+        if existing_id in patient.get("caregiver_ids", []):
+            raise HTTPException(status_code=400, detail="Este usuario ya es cuidador de este paciente")
+
+    now = datetime.utcnow()
+
+    # Check for existing pending invitation (reuse code if still valid)
+    existing_invitation = await db.invitations.find_one({
+        "patient_id": invitation.patient_id,
+        "invitee_email": invitee_email,
+        "status": "pending",
+        "expires_at": {"$gt": now}
+    })
+
+    if existing_invitation:
+        code = existing_invitation["code"]
+        await db.invitations.update_one(
+            {"_id": existing_invitation["_id"]},
+            {"$set": {"created_at": now, "expires_at": now + timedelta(hours=48)}}
+        )
+    else:
+        code = generate_invitation_code()
+        await db.invitations.insert_one({
+            "code": code,
+            "patient_id": invitation.patient_id,
+            "inviter_id": user_id,
+            "invitee_email": invitee_email,
+            "status": "pending",
+            "created_at": now,
+            "expires_at": now + timedelta(hours=48)
+        })
+
+    email_sent = await send_invitation_email(
+        to_email=invitee_email,
+        inviter_name=inviter["name"],
+        patient_name=patient["name"],
+        code=code
+    )
+
+    if not email_sent:
+        raise HTTPException(status_code=500, detail="No se pudo enviar el email. Verifica la dirección e inténtalo de nuevo.")
+
+    return {"message": "Invitación enviada", "email": invitee_email}
+
+
+@api_router.post("/caregivers/accept-invitation")
+async def accept_invitation(
+    data: AcceptInvitation,
+    user_id: str = Depends(get_current_user)
+):
+    """Accept a caregiver invitation using a 6-digit code"""
+    code = data.code.strip().upper()
+
+    invitation = await db.invitations.find_one({
+        "code": code,
+        "status": "pending"
+    })
+
+    if not invitation:
+        raise HTTPException(status_code=404, detail="Código inválido. Verifica el código e inténtalo de nuevo.")
+
+    if invitation["expires_at"] < datetime.utcnow():
+        await db.invitations.update_one(
+            {"_id": invitation["_id"]},
+            {"$set": {"status": "expired"}}
+        )
+        raise HTTPException(status_code=400, detail="El código ha expirado. Pide al invitador que envíe una nueva invitación.")
+
+    # Verify the accepting user's email matches the invited email
+    current_user = await db.caregivers.find_one({"_id": ObjectId(user_id)})
+    if not current_user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    if current_user["email"].lower() != invitation["invitee_email"].lower():
+        raise HTTPException(status_code=403, detail="Este código fue enviado a otro email. Inicia sesión con el email correcto.")
+
+    patient_id = invitation["patient_id"]
+    patient = await db.patients.find_one({"_id": ObjectId(patient_id)})
+    if not patient:
+        raise HTTPException(status_code=404, detail="El paciente ya no existe")
+
+    # Add user to patient's caregivers if not already there
+    if user_id not in patient.get("caregiver_ids", []):
+        await db.patients.update_one(
+            {"_id": ObjectId(patient_id)},
+            {"$addToSet": {"caregiver_ids": user_id}}
+        )
+
+    # Mark invitation as accepted
+    await db.invitations.update_one(
+        {"_id": invitation["_id"]},
+        {"$set": {"status": "accepted"}}
+    )
+
+    return {
+        "message": "Invitación aceptada",
+        "patient_id": patient_id,
+        "patient_name": patient["name"]
+    }
 
 # ============= AI ASSISTANT ENDPOINT =============
 @api_router.post("/ai/ask")

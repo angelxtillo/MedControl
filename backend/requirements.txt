@@ -9,3 +9,4 @@ python-jose==3.5.0
 pydantic==2.12.5
 python-multipart==0.0.21
 dnspython==2.8.0
+sendgrid==6.11.0
