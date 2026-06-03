@@ -729,13 +729,36 @@ async def get_today_dashboard(user_id: str = Depends(get_current_user), timezone
     # Get all active medications for these patients
     medications = await db.medications.find({
         "patient_id": {"$in": patient_ids},
-        "active": True
+        "active": True,
+        "start_date": {"$lte": today_str}
     }).to_list(200)
     
     now_local = datetime.utcnow() + timedelta(minutes=timezone_offset)
     today = now_local.date()
     today_str = today.isoformat()
-    
+
+    weekday_local = now_local.weekday()  # 0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri, 5=Sat, 6=Sun
+
+    WEEKDAY_MAP = {
+        "lunes": 0, "martes": 1, "miércoles": 2, "miercoles": 2,
+        "jueves": 3, "viernes": 4, "sábado": 5, "sabado": 5,
+        "domingo": 6
+    }
+
+    def should_show_today(med: dict, weekday_local: int) -> bool:
+        frequency = med.get("frequency", "").lower()
+        day_names = ["lunes", "martes", "miércoles", "miercoles",
+                     "jueves", "viernes", "sábado", "sabado", "domingo"]
+        has_day_name = any(day in frequency for day in day_names)
+        if not has_day_name:
+            return True
+        for day_name, day_num in WEEKDAY_MAP.items():
+            if day_name in frequency and day_num == weekday_local:
+                return True
+        return False
+
+    medications = [m for m in medications if should_show_today(m, weekday_local)]
+
     # Fetch all logs for today in one query
     all_logs = await db.medication_logs.find({
         "patient_id": {"$in": patient_ids},
