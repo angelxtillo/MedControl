@@ -19,15 +19,15 @@ export default function TabLayout() {
         tabBarInactiveTintColor: '#999',
         tabBarStyle: {
           backgroundColor: 'white',
-          borderTopWidth: 1,
+          borderTopWidth: 0,
           borderTopColor: '#e0e0e0',
           height: 65 + bottomPadding,
           paddingBottom: bottomPadding,
           paddingTop: 8,
-          elevation: 8,
+          elevation: 0,
           shadowColor: '#000',
           shadowOffset: { width: 0, height: -2 },
-          shadowOpacity: 0.1,
+          shadowOpacity: 0,
           shadowRadius: 4,
         },
         tabBarLabelStyle: {
