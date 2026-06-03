@@ -1,0 +1,96 @@
+diff --git a/model.patch b/model.patch
+index dce15d3..e69de29 100644
+--- a/model.patch
++++ b/model.patch
+@@ -1,91 +0,0 @@
+-diff --git a/frontend/app/(tabs)/settings.tsx b/frontend/app/(tabs)/settings.tsx
+-index 4670334..bac27e9 100644
+---- a/frontend/app/(tabs)/settings.tsx
+-+++ b/frontend/app/(tabs)/settings.tsx
+-@@ -352,7 +352,7 @@ export default function SettingsScreen() {
+-               </View>
+- 
+-               {/* Opciones de donación */}
+--              <Text style={styles.donateOptionsTitle}>Elige tu plataforma preferida:</Text>
+-+              <Text style={styles.donateOptionsTitle}>Elige tu método preferido:</Text>
+- 
+-               <TouchableOpacity 
+-                 style={[styles.donateOption, { backgroundColor: '#0070BA' }]}
+-@@ -364,7 +364,7 @@ export default function SettingsScreen() {
+-               </TouchableOpacity>
+- 
+-               <TouchableOpacity 
+--                style={[styles.donateOption, { backgroundColor: '#662D91' }]}
+-+                style={[styles.donateOption, { backgroundColor: '#E31C5F' }]}
+-                 onPress={() => openDonationLink('nequi')}
+-               >
+-                 <Ionicons name="phone-portrait" size={24} color="white" />
+-diff --git a/model.patch b/model.patch
+-index 5c473ca..e69de29 100644
+---- a/model.patch
+-+++ b/model.patch
+-@@ -1,64 +0,0 @@
+--diff --git a/frontend/app/(tabs)/settings.tsx b/frontend/app/(tabs)/settings.tsx
+--index 2d5147c..4670334 100644
+----- a/frontend/app/(tabs)/settings.tsx
+--+++ b/frontend/app/(tabs)/settings.tsx
+--@@ -39,14 +39,16 @@ export default function SettingsScreen() {
+--     let url = '';
+--     switch (platform) {
+--       case 'paypal':
+---        url = 'https://paypal.me/https://www.paypal.com/ncp/payment/RVPPJA6DAQDZN'; 
+---        break;
+---      case 'kofi':
+---        url = 'https://ko-fi.com/tuusuario'; 
+---        break;
+---      case 'buymeacoffee':
+---        url = 'https://buymeacoffee.com/tuusuario'; 
+--+        url = 'https://paypal.me/tuusuario'; // Reemplazar con tu enlace de PayPal
+--         break;
+--+      case 'nequi':
+--+        // Nequi no tiene enlace web directo, mostramos instrucciones
+--+        Alert.alert(
+--+          'Donar con Nequi',
+--+          'Puedes enviar tu aporte al número:\n\n📱 300-XXX-XXXX\n\nA nombre de: Tu Nombre\n\n¡Gracias por tu apoyo! 💙',
+--+          [{ text: 'Entendido', style: 'default' }]
+--+        );
+--+        return;
+--     }
+--     
+--     try {
+--@@ -246,7 +248,7 @@ export default function SettingsScreen() {
+--                 </Text>
+--                 <Text style={styles.aboutText}>
+--                   Si deseas apoyar el desarrollo continuo de esta app, puedes hacerlo de 
+---                  forma voluntaria desde la sección "Apoyar el Proyecto".
+--+                  forma voluntaria desde la sección &quot;Apoyar el Proyecto&quot;.
+--                 </Text>
+--               </View>
+-- 
+--@@ -362,21 +364,12 @@ export default function SettingsScreen() {
+--               </TouchableOpacity>
+-- 
+--               <TouchableOpacity 
+---                style={[styles.donateOption, { backgroundColor: '#FF5E5B' }]}
+---                onPress={() => openDonationLink('kofi')}
+---              >
+---                <Ionicons name="cafe" size={24} color="white" />
+---                <Text style={styles.donateOptionText}>Ko-fi</Text>
+---                <Ionicons name="open-outline" size={18} color="white" />
+---              </TouchableOpacity>
+---
+---              <TouchableOpacity 
+---                style={[styles.donateOption, { backgroundColor: '#FFDD00' }]}
+---                onPress={() => openDonationLink('buymeacoffee')}
+--+                style={[styles.donateOption, { backgroundColor: '#662D91' }]}
+--+                onPress={() => openDonationLink('nequi')}
+--               >
+---                <Ionicons name="cafe-outline" size={24} color="#000" />
+---                <Text style={[styles.donateOptionText, { color: '#000' }]}>Buy Me a Coffee</Text>
+---                <Ionicons name="open-outline" size={18} color="#000" />
+--+                <Ionicons name="phone-portrait" size={24} color="white" />
+--+                <Text style={styles.donateOptionText}>Nequi</Text>
+--+                <Ionicons name="information-circle-outline" size={18} color="white" />
+--               </TouchableOpacity>
+-- 
+--               {/* Mensaje de gratitud */}

@@ -1,0 +1,18 @@
+# Render Blueprint for MedControl Backend
+services:
+  - type: web
+    name: medcontrol-api
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: MONGO_URL
+        sync: false
+      - key: DB_NAME
+        value: medcontrol_prod
+      - key: JWT_SECRET
+        generateValue: true
+      - key: EMERGENT_LLM_KEY
+        sync: false

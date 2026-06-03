@@ -1,0 +1,11 @@
+node_modules/**/*
+.expo/**/*
+.cache/**/*
+**/*.log
+.git/**/*
+.DS_Store
+*.swp
+*.swo
+*~
+.vscode/**/*
+.idea/**/*
