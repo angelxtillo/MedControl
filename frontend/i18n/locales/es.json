@@ -234,7 +234,13 @@
     "dose5ml": "5 ml",
     "dose10ml": "10 ml",
     "dose10drops": "10 gotas",
-    "dose15drops": "15 gotas"
+    "dose15drops": "15 gotas",
+    "freq4h": "Cada 4 horas",
+    "freq6h": "Cada 6 horas",
+    "freq8h": "Cada 8 horas",
+    "freq12h": "Cada 12 horas",
+    "freqOnceDaily": "Una vez al día",
+    "freqCustom": "Personalizado"
   },
   "history": {
     "title": "Historial",

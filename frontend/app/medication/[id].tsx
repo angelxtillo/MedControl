@@ -31,14 +31,14 @@ const getDayNames = (lang: string): string[] => {
 
 const SPANISH_DAYS = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sa', 'Do'];
 
-// Labels must remain in Spanish — stored as-is in MongoDB and matched on load
+// label = Spanish string stored in MongoDB; labelKey = i18n key for display only
 const FREQUENCY_OPTIONS = [
-  { label: 'Cada 4 horas', value: 'every_4h', hours: 4 },
-  { label: 'Cada 6 horas', value: 'every_6h', hours: 6 },
-  { label: 'Cada 8 horas', value: 'every_8h', hours: 8 },
-  { label: 'Cada 12 horas', value: 'every_12h', hours: 12 },
-  { label: 'Una vez al día', value: 'once_daily', hours: 24 },
-  { label: 'Personalizado', value: 'custom', hours: 0 },
+  { label: 'Cada 4 horas',  labelKey: 'medications.freq4h',        value: 'every_4h',   hours: 4  },
+  { label: 'Cada 6 horas',  labelKey: 'medications.freq6h',        value: 'every_6h',   hours: 6  },
+  { label: 'Cada 8 horas',  labelKey: 'medications.freq8h',        value: 'every_8h',   hours: 8  },
+  { label: 'Cada 12 horas', labelKey: 'medications.freq12h',       value: 'every_12h',  hours: 12 },
+  { label: 'Una vez al día',labelKey: 'medications.freqOnceDaily', value: 'once_daily', hours: 24 },
+  { label: 'Personalizado', labelKey: 'medications.freqCustom',    value: 'custom',     hours: 0  },
 ];
 
 // Day names must remain in Spanish — used to reconstruct frequency strings stored in MongoDB
@@ -273,7 +273,7 @@ export default function EditMedication() {
                     {selectedFreq === opt.value && <View style={styles.freqRadioInner} />}
                   </View>
                   <Text style={[styles.freqOptionText, selectedFreq === opt.value && styles.freqOptionTextSelected]}>
-                    {opt.label}
+                    {t(opt.labelKey)}
                   </Text>
                 </TouchableOpacity>
               ))}

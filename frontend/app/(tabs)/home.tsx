@@ -166,6 +166,16 @@ export default function Home() {
     return groups;
   };
 
+  const formatUpcomingDate = (dateStr: string): string => {
+    const locale =
+      i18n.language === 'es' ? 'es-CO' :
+      i18n.language === 'pt' ? 'pt-BR' :
+      i18n.language === 'fr' ? 'fr-FR' : 'en-US';
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    return date.toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' });
+  };
+
   const getTimeUntil = (scheduledTime: string): string => {
     const parts = scheduledTime.split(':');
     if (parts.length < 2) return '';
@@ -290,7 +300,7 @@ export default function Home() {
               <View key={day.date}>
                 <View style={styles.upcomingDayHeader}>
                   <Ionicons name="calendar-outline" size={16} color="#2196F3" />
-                  <Text style={styles.upcomingDayLabel}>{day.day_label}</Text>
+                  <Text style={styles.upcomingDayLabel}>{formatUpcomingDate(day.date)}</Text>
                 </View>
                 {day.medications.map((med, idx) => (
                   <View key={`${med.medication_id}-${med.scheduled_time}-${idx}`} style={styles.upcomingMedItem}>
