@@ -838,6 +838,109 @@ async def get_today_dashboard(user_id: str = Depends(get_current_user), timezone
         "missed": missed
     }
 
+# ============= UPCOMING DASHBOARD ENDPOINT =============
+@api_router.get("/dashboard/upcoming")
+async def get_upcoming_dashboard(
+    timezone_offset: int = 0,
+    user_id: str = Depends(get_current_user)
+):
+    now_local = datetime.utcnow() + timedelta(minutes=timezone_offset)
+
+    DAYS_ES = {
+        0: "Lunes", 1: "Martes", 2: "Miércoles",
+        3: "Jueves", 4: "Viernes", 5: "Sábado", 6: "Domingo"
+    }
+    MONTHS_ES = {
+        1: "enero", 2: "febrero", 3: "marzo", 4: "abril",
+        5: "mayo", 6: "junio", 7: "julio", 8: "agosto",
+        9: "septiembre", 10: "octubre", 11: "noviembre", 12: "diciembre"
+    }
+    WEEKDAY_MAP = {
+        "lunes": 0, "martes": 1, "miércoles": 2, "miercoles": 2,
+        "jueves": 3, "viernes": 4, "sábado": 5, "sabado": 5,
+        "domingo": 6
+    }
+
+    def should_show_on_day(med: dict, weekday: int) -> bool:
+        frequency = med.get("frequency", "").lower()
+        day_names = ["lunes", "martes", "miércoles", "miercoles",
+                     "jueves", "viernes", "sábado", "sabado", "domingo"]
+        has_day_name = any(day in frequency for day in day_names)
+        if not has_day_name:
+            return True
+        for day_name, day_num in WEEKDAY_MAP.items():
+            if day_name in frequency and day_num == weekday:
+                return True
+        return False
+
+    # Next 7 days starting from tomorrow
+    upcoming_dates = [
+        (now_local + timedelta(days=i)).date().isoformat()
+        for i in range(1, 8)
+    ]
+    last_date = upcoming_dates[-1]
+
+    patients = await db.patients.find(
+        {"caregiver_ids": user_id},
+        {"name": 1, "_id": 1}
+    ).to_list(100)
+    patient_ids = [str(p["_id"]) for p in patients]
+    patients_by_id = {str(p["_id"]): p["name"] for p in patients}
+
+    if not patient_ids:
+        return []
+
+    medications = await db.medications.find({
+        "patient_id": {"$in": patient_ids},
+        "active": True,
+        "start_date": {"$lte": last_date}
+    }).to_list(200)
+
+    result_by_date: dict = {}
+
+    for future_date_str in upcoming_dates:
+        future_dt = datetime.fromisoformat(future_date_str)
+        future_weekday = future_dt.weekday()
+        label = f"{DAYS_ES[future_weekday]} {future_dt.day} de {MONTHS_ES[future_dt.month]}"
+
+        for med in medications:
+            if med.get("start_date", "") > future_date_str:
+                continue
+            end_date = med.get("end_date")
+            if end_date and end_date < future_date_str:
+                continue
+            if not should_show_on_day(med, future_weekday):
+                continue
+
+            for time_slot in med["schedule_times"]:
+                try:
+                    parts = time_slot.split(":")
+                    normalized_time = f"{parts[0].zfill(2)}:{parts[1].zfill(2)}" if len(parts) == 2 else time_slot
+                except Exception:
+                    normalized_time = time_slot
+
+                if future_date_str not in result_by_date:
+                    result_by_date[future_date_str] = {
+                        "date": future_date_str,
+                        "day_label": label,
+                        "medications": []
+                    }
+                result_by_date[future_date_str]["medications"].append({
+                    "date": future_date_str,
+                    "day_label": label,
+                    "medication_id": str(med["_id"]),
+                    "medication_name": med["name"],
+                    "dosage": med["dosage"],
+                    "scheduled_time": normalized_time,
+                    "patient_name": patients_by_id.get(med["patient_id"], "Unknown"),
+                    "patient_id": med["patient_id"]
+                })
+
+    for day_data in result_by_date.values():
+        day_data["medications"].sort(key=lambda x: x["scheduled_time"])
+
+    return [result_by_date[d] for d in sorted(result_by_date.keys())]
+
 # ============= AI ASSISTANT ENDPOINT =============
 @api_router.post("/ai/ask")
 async def ai_assistant(query: AIQuery, user_id: str = Depends(get_current_user)):

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -22,6 +22,23 @@ interface DashboardData {
   missed: number;
 }
 
+interface UpcomingMed {
+  date: string;
+  day_label: string;
+  medication_id: string;
+  medication_name: string;
+  dosage: string;
+  scheduled_time: string;
+  patient_name: string;
+  patient_id: string;
+}
+
+interface UpcomingDay {
+  date: string;
+  day_label: string;
+  medications: UpcomingMed[];
+}
+
 export default function Home() {
   const { user } = useAuth();
   const [dashboard, setDashboard] = useState<DashboardData>({
@@ -30,6 +47,7 @@ export default function Home() {
     pending: 0,
     missed: 0,
   });
+  const [upcomingDays, setUpcomingDays] = useState<UpcomingDay[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [retrying, setRetrying] = useState(false);
@@ -48,8 +66,12 @@ export default function Home() {
       try {
         if (attempt > 1) setRetrying(true);
         const offset = new Date().getTimezoneOffset() * -1;
-        const response = await api.get('/dashboard/today', { params: { timezone_offset: offset } });
-        setDashboard(response.data);
+        const [todayRes, upcomingRes] = await Promise.all([
+          api.get('/dashboard/today', { params: { timezone_offset: offset } }),
+          api.get('/dashboard/upcoming', { params: { timezone_offset: offset } }).catch(() => ({ data: [] })),
+        ]);
+        setDashboard(todayRes.data);
+        setUpcomingDays(upcomingRes.data);
         setRetrying(false);
         setLoading(false);
         setRefreshing(false);
@@ -132,6 +154,16 @@ export default function Home() {
     return result;
   };
 
+  const groupByPatient = (medications: any[]): Record<string, any[]> => {
+    const groups: Record<string, any[]> = {};
+    for (const med of medications) {
+      const key = med.patient_name || 'Sin paciente';
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(med);
+    }
+    return groups;
+  };
+
   const getTimeUntil = (scheduledTime: string): string => {
     const parts = scheduledTime.split(':');
     if (parts.length < 2) return '';
@@ -147,6 +179,9 @@ export default function Home() {
     if (h > 0) return `en ${h}h`;
     return `en ${m}min`;
   };
+
+  const visibleMeds = getVisibleMedications(dashboard.medications_today);
+  const patientGroups = groupByPatient(visibleMeds);
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -202,32 +237,65 @@ export default function Home() {
             </View>
           );
         })()}
+
         {retrying && (
           <View style={styles.retryingBanner}>
             <Text style={styles.retryingText}>Conectando con el servidor...</Text>
           </View>
         )}
+
         <Text style={styles.sectionTitle}>Medicamentos de Hoy</Text>
+
         {loading ? (
           <Text style={styles.emptyText}>Cargando...</Text>
-        ) : dashboard.medications_today.length === 0 ? (
+        ) : visibleMeds.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="checkmark-circle-outline" size={64} color="#ccc" />
             <Text style={styles.emptyText}>No hay medicamentos programados para hoy</Text>
           </View>
         ) : (
-          getVisibleMedications(dashboard.medications_today).map((med) => (
-            <MedicationCard
-              key={`${med.medication_id}-${med.scheduled_datetime}`}
-              medicationName={med.medication_name}
-              dosage={med.dosage}
-              scheduledTime={med.scheduled_time}
-              patientName={med.patient_name}
-              status={med.status}
-              onMarkTaken={() => handleMarkTaken(med.medication_id, med.patient_id, med.scheduled_datetime, med.log_id)}
-              onMarkSkipped={() => handleMarkSkipped(med.medication_id, med.patient_id, med.scheduled_datetime, med.log_id)}
-            />
+          Object.entries(patientGroups).map(([patientName, meds]) => (
+            <View key={patientName}>
+              <View style={styles.patientGroupHeader}>
+                <Ionicons name="person-circle-outline" size={18} color="#666" />
+                <Text style={styles.patientGroupName}>{patientName}</Text>
+              </View>
+              {meds.map((med) => (
+                <MedicationCard
+                  key={`${med.medication_id}-${med.scheduled_datetime}`}
+                  medicationName={med.medication_name}
+                  dosage={med.dosage}
+                  scheduledTime={med.scheduled_time}
+                  patientName={med.patient_name}
+                  status={med.status}
+                  onMarkTaken={() => handleMarkTaken(med.medication_id, med.patient_id, med.scheduled_datetime, med.log_id)}
+                  onMarkSkipped={() => handleMarkSkipped(med.medication_id, med.patient_id, med.scheduled_datetime, med.log_id)}
+                />
+              ))}
+            </View>
           ))
+        )}
+
+        {upcomingDays.length > 0 && (
+          <View style={styles.upcomingSection}>
+            <Text style={styles.upcomingTitle}>Próximos Días</Text>
+            {upcomingDays.map((day) => (
+              <View key={day.date}>
+                <View style={styles.upcomingDayHeader}>
+                  <Ionicons name="calendar-outline" size={16} color="#2196F3" />
+                  <Text style={styles.upcomingDayLabel}>{day.day_label}</Text>
+                </View>
+                {day.medications.map((med, idx) => (
+                  <View key={`${med.medication_id}-${med.scheduled_time}-${idx}`} style={styles.upcomingMedItem}>
+                    <View style={styles.upcomingMedInfo}>
+                      <Text style={styles.upcomingMedName}>{med.medication_name}</Text>
+                      <Text style={styles.upcomingMedDetail}>{med.dosage}  ·  {med.scheduled_time}  ·  {med.patient_name}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ))}
+          </View>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -348,5 +416,60 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#F57F17',
     fontWeight: '500',
+  },
+  patientGroupHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    marginBottom: 6,
+  },
+  patientGroupName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#555',
+  },
+  upcomingSection: {
+    marginTop: 24,
+  },
+  upcomingTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#212121',
+    marginBottom: 12,
+  },
+  upcomingDayHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 12,
+    marginBottom: 6,
+  },
+  upcomingDayLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#2196F3',
+    textTransform: 'capitalize',
+  },
+  upcomingMedItem: {
+    backgroundColor: 'white',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 6,
+    borderLeftWidth: 3,
+    borderLeftColor: '#BBDEFB',
+  },
+  upcomingMedInfo: {
+    flex: 1,
+  },
+  upcomingMedName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#212121',
+    marginBottom: 2,
+  },
+  upcomingMedDetail: {
+    fontSize: 12,
+    color: '#757575',
   },
 });
