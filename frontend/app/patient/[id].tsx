@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, router } from 'expo-router';
 import api from '../../utils/api';
 import CaregiversManager from '../../components/CaregiversManager';
+import { useTranslation } from 'react-i18next';
 
 interface Patient {
   id: string;
@@ -40,6 +41,7 @@ interface Medication {
 }
 
 export default function PatientDetail() {
+  const { t } = useTranslation();
   const { id } = useLocalSearchParams();
   const [patient, setPatient] = useState<Patient | null>(null);
   const [medications, setMedications] = useState<Medication[]>([]);
@@ -75,7 +77,7 @@ export default function PatientDetail() {
       setPatient(currentPatient);
       setMedications(medicationsResponse.data);
     } catch (error) {
-      Alert.alert('Error', 'No se pudieron cargar los datos del paciente');
+      Alert.alert(t('common.error'), t('medications.errorLoadData'));
     } finally {
       setRefreshing(false);
     }
@@ -88,20 +90,20 @@ export default function PatientDetail() {
 
   const handleDeletePatient = () => {
     Alert.alert(
-      'Eliminar Paciente',
-      '¿Estás seguro de que quieres eliminar este paciente y todos sus medicamentos?',
+      t('patients.deletePatient'),
+      t('patients.deleteConfirm'),
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Eliminar',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: async () => {
             try {
               await api.delete(`/patients/${id}`);
-              Alert.alert('Éxito', 'Paciente eliminado');
+              Alert.alert(t('common.success'), t('medications.patientDeleted'));
               router.back();
             } catch (error) {
-              Alert.alert('Error', 'No se pudo eliminar el paciente');
+              Alert.alert(t('common.error'), t('medications.errorDeletePatient'));
             }
           },
         },
@@ -111,20 +113,20 @@ export default function PatientDetail() {
 
   const handleDeleteMedication = (medicationId: string) => {
     Alert.alert(
-      'Eliminar Medicamento',
-      '¿Estás seguro de que quieres eliminar este medicamento?',
+      t('medications.deleteMedication'),
+      t('medications.deleteConfirm'),
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Eliminar',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: async () => {
             try {
               await api.delete(`/medications/${medicationId}`);
-              Alert.alert('Éxito', 'Medicamento eliminado');
+              Alert.alert(t('common.success'), t('medications.deleted'));
               loadPatientData();
             } catch (error) {
-              Alert.alert('Error', 'No se pudo eliminar el medicamento');
+              Alert.alert(t('common.error'), t('medications.errorDelete'));
             }
           },
         },
@@ -139,7 +141,7 @@ export default function PatientDetail() {
       });
       loadPatientData();
     } catch (error) {
-      Alert.alert('Error', 'No se pudo actualizar el estado');
+      Alert.alert(t('common.error'), t('medications.errorUpdateStatus'));
     }
   };
 
@@ -150,7 +152,7 @@ export default function PatientDetail() {
       });
       loadPatientData();
     } catch (error) {
-      Alert.alert('Error', 'No se pudieron actualizar las notificaciones');
+      Alert.alert(t('common.error'), t('medications.errorUpdateNotifications'));
     }
   };
 
@@ -160,7 +162,7 @@ export default function PatientDetail() {
 
   const handleSavePatient = async () => {
     if (!editName.trim()) {
-      Alert.alert('Error', 'El nombre es obligatorio');
+      Alert.alert(t('common.error'), t('patients.nameRequired2'));
       return;
     }
 
@@ -173,7 +175,7 @@ export default function PatientDetail() {
       if (editAge.trim()) {
         const age = parseInt(editAge, 10);
         if (isNaN(age) || age < 0 || age > 150) {
-          Alert.alert('Error', 'Ingresa una edad válida');
+          Alert.alert(t('common.error'), t('patients.validAge'));
           setSaving(false);
           return;
         }
@@ -190,11 +192,11 @@ export default function PatientDetail() {
 
       await api.put(`/patients/${id}`, updateData);
       
-      Alert.alert('Éxito', 'Paciente actualizado correctamente');
+      Alert.alert(t('common.success'), t('patients.patientUpdated'));
       setEditModalVisible(false);
       loadPatientData();
     } catch (error) {
-      Alert.alert('Error', 'No se pudieron guardar los cambios');
+      Alert.alert(t('common.error'), t('patients.errorSaveChanges'));
     } finally {
       setSaving(false);
     }
@@ -203,7 +205,7 @@ export default function PatientDetail() {
   if (!patient) {
     return (
       <SafeAreaView style={styles.container}>
-        <Text style={styles.loadingText}>Cargando...</Text>
+        <Text style={styles.loadingText}>{t('common.loading')}</Text>
       </SafeAreaView>
     );
   }
@@ -226,17 +228,17 @@ export default function PatientDetail() {
             )}
           </View>
           <Text style={styles.patientName}>{patient.name}</Text>
-          {patient.age && <Text style={styles.patientAge}>{patient.age} años</Text>}
+          {patient.age && <Text style={styles.patientAge}>{patient.age} {t('patients.years')}</Text>}
           {patient.notes && <Text style={styles.patientNotes}>{patient.notes}</Text>}
           
           <View style={styles.patientActions}>
             <TouchableOpacity style={styles.editPatientButton} onPress={openEditModal}>
               <Ionicons name="pencil-outline" size={20} color="#2196F3" />
-              <Text style={styles.editPatientText}>Editar</Text>
+              <Text style={styles.editPatientText}>{t('common.edit')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.deletePatientButton} onPress={handleDeletePatient}>
               <Ionicons name="trash-outline" size={20} color="#f44336" />
-              <Text style={styles.deletePatientText}>Eliminar</Text>
+              <Text style={styles.deletePatientText}>{t('common.delete')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -250,7 +252,7 @@ export default function PatientDetail() {
 
         <View style={styles.medicationsSection}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Medicamentos</Text>
+            <Text style={styles.sectionTitle}>{t('medications.title')}</Text>
             <TouchableOpacity
               style={styles.addButton}
               onPress={() => router.push(`/medication/add-wizard?patientId=${id}`)}
@@ -262,8 +264,8 @@ export default function PatientDetail() {
           {medications.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Ionicons name="medical-outline" size={48} color="#ccc" />
-              <Text style={styles.emptyText}>Sin medicamentos</Text>
-              <Text style={styles.emptySubtext}>Agrega el primer medicamento</Text>
+              <Text style={styles.emptyText}>{t('medications.noMedications')}</Text>
+              <Text style={styles.emptySubtext}>{t('medications.addFirst')}</Text>
             </View>
           ) : (
             medications.map((med) => (
@@ -311,7 +313,7 @@ export default function PatientDetail() {
                       styles.notificationRowText,
                       med.notifications_enabled === false && styles.notificationRowTextOff
                     ]}>
-                      {med.notifications_enabled !== false ? 'Recordatorios activos' : 'Sin recordatorios'}
+                      {med.notifications_enabled !== false ? t('medications.notificationsOn') : t('medications.notificationsOff')}
                     </Text>
                   </View>
                   <TouchableOpacity
@@ -334,14 +336,14 @@ export default function PatientDetail() {
                     onPress={() => router.push(`/medication/${med.id}`)}
                   >
                     <Ionicons name="pencil" size={16} color="#2196F3" />
-                    <Text style={styles.editButtonText}>Editar</Text>
+                    <Text style={styles.editButtonText}>{t('common.edit')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.deleteButton}
                     onPress={() => handleDeleteMedication(med.id)}
                   >
                     <Ionicons name="trash" size={16} color="#f44336" />
-                    <Text style={styles.deleteButtonText}>Eliminar</Text>
+                    <Text style={styles.deleteButtonText}>{t('common.delete')}</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -363,7 +365,7 @@ export default function PatientDetail() {
         >
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Editar Paciente</Text>
+              <Text style={styles.modalTitle}>{t('patients.editPatient')}</Text>
               <TouchableOpacity
                 onPress={() => setEditModalVisible(false)}
                 style={styles.closeButton}
@@ -374,35 +376,35 @@ export default function PatientDetail() {
 
             <ScrollView style={styles.modalForm}>
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Nombre *</Text>
+                <Text style={styles.inputLabel}>{t('patients.name')} *</Text>
                 <TextInput
                   style={styles.input}
                   value={editName}
                   onChangeText={setEditName}
-                  placeholder="Nombre del paciente"
+                  placeholder={t('auth.fullName')}
                   placeholderTextColor="#999"
                 />
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Edad</Text>
+                <Text style={styles.inputLabel}>{t('patients.age')}</Text>
                 <TextInput
                   style={styles.input}
                   value={editAge}
                   onChangeText={setEditAge}
-                  placeholder="Edad en años"
+                  placeholder={t('patients.years')}
                   placeholderTextColor="#999"
                   keyboardType="numeric"
                 />
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Notas</Text>
+                <Text style={styles.inputLabel}>{t('patients.notes')}</Text>
                 <TextInput
                   style={[styles.input, styles.textArea]}
                   value={editNotes}
                   onChangeText={setEditNotes}
-                  placeholder="Notas adicionales (condiciones, alergias, etc.)"
+                  placeholder={t('patients.additionalNotes')}
                   placeholderTextColor="#999"
                   multiline
                   numberOfLines={3}
@@ -415,7 +417,7 @@ export default function PatientDetail() {
                 style={styles.cancelButton}
                 onPress={() => setEditModalVisible(false)}
               >
-                <Text style={styles.cancelButtonText}>Cancelar</Text>
+                <Text style={styles.cancelButtonText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.saveButton, saving && styles.saveButtonDisabled]}
@@ -425,7 +427,7 @@ export default function PatientDetail() {
                 {saving ? (
                   <ActivityIndicator size="small" color="white" />
                 ) : (
-                  <Text style={styles.saveButtonText}>Guardar</Text>
+                  <Text style={styles.saveButtonText}>{t('common.save')}</Text>
                 )}
               </TouchableOpacity>
             </View>

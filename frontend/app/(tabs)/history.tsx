@@ -36,11 +36,11 @@ interface Log {
 
 type StatusFilter = 'all' | 'taken' | 'skipped' | 'missed';
 
-const FILTER_BUTTONS: { key: StatusFilter; label: string; activeColor: string }[] = [
-  { key: 'all',     label: 'Todos',    activeColor: '#2196F3' },
-  { key: 'taken',   label: 'Tomados',  activeColor: '#4CAF50' },
-  { key: 'skipped', label: 'Saltados', activeColor: '#FF9800' },
-  { key: 'missed',  label: 'Perdidos', activeColor: '#f44336' },
+const FILTER_BUTTONS: { key: StatusFilter; labelKey: string; activeColor: string }[] = [
+  { key: 'all',     labelKey: 'history.filterAll',     activeColor: '#2196F3' },
+  { key: 'taken',   labelKey: 'history.filterTaken',   activeColor: '#4CAF50' },
+  { key: 'skipped', labelKey: 'history.filterSkipped', activeColor: '#FF9800' },
+  { key: 'missed',  labelKey: 'history.filterMissed',  activeColor: '#f44336' },
 ];
 
 export default function History() {
@@ -104,7 +104,7 @@ export default function History() {
   const getMedicationName = (log: Log): string => {
     if (log.medication_name) return log.medication_name;
     const med = medications.find(m => m.id === log.medication_id);
-    return med ? med.name : 'Desconocido';
+    return med ? med.name : t('common.unknown');
   };
 
   const getStatusColor = (status: string) => {
@@ -149,12 +149,12 @@ export default function History() {
   const getTimeDetail = (log: Log): string | null => {
     switch (log.status) {
       case 'taken':
-        if (log.taken_datetime) return `${t('history.takenAt')} ${formatTime(log.taken_datetime)}`;
+        if (log.taken_datetime) return t('history.takenAt', { time: formatTime(log.taken_datetime) });
         return t('history.takenNoTime');
       case 'missed':
-        return `${t('history.notTaken')} ${formatTime(log.scheduled_datetime)}`;
+        return t('history.notTaken', { time: formatTime(log.scheduled_datetime) });
       case 'skipped':
-        if (log.taken_datetime) return `${t('history.skippedAt')} ${formatTime(log.taken_datetime)}`;
+        if (log.taken_datetime) return t('history.skippedAt', { time: formatTime(log.taken_datetime) });
         return t('history.skipped');
       default:
         return null;
@@ -220,7 +220,7 @@ export default function History() {
                   onPress={() => setStatusFilter(btn.key)}
                 >
                   <Text style={[styles.filterButtonText, isActive && styles.filterButtonTextActive]}>
-                    {btn.label}
+                    {t(btn.labelKey)}
                   </Text>
                 </TouchableOpacity>
               );
@@ -256,7 +256,7 @@ export default function History() {
                           {format(new Date(log.scheduled_datetime), "d 'de' MMMM, yyyy", { locale: es })}
                         </Text>
                         <Text style={styles.scheduledTime}>
-                          {t('history.scheduled')}: {formatTime(log.scheduled_datetime)}
+                          {t('history.scheduled', { time: formatTime(log.scheduled_datetime) })}
                         </Text>
                         {getTimeDetail(log) !== null && (
                           <Text style={[

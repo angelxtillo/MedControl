@@ -14,6 +14,7 @@ import { MedicationCard } from '../../components/MedicationCard';
 import api from '../../utils/api';
 import { useFocusEffect } from '@react-navigation/native';
 import { requestNotificationPermissions } from '../../utils/notifications';
+import { useTranslation } from 'react-i18next';
 
 interface DashboardData {
   medications_today: any[];
@@ -40,6 +41,7 @@ interface UpcomingDay {
 }
 
 export default function Home() {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const [dashboard, setDashboard] = useState<DashboardData>({
     medications_today: [],
@@ -84,7 +86,7 @@ export default function Home() {
           setRetrying(false);
           setLoading(false);
           setRefreshing(false);
-          Alert.alert('Error', 'No se pudo cargar el dashboard');
+          Alert.alert(t('common.error'), t('home.errorLoadDashboard'));
         }
       }
     }
@@ -107,9 +109,9 @@ export default function Home() {
         });
       }
       loadDashboard();
-      Alert.alert('Éxito', 'Medicamento marcado como tomado');
+      Alert.alert(t('common.success'), t('home.successTaken'));
     } catch (error) {
-      Alert.alert('Error', 'No se pudo actualizar el estado');
+      Alert.alert(t('common.error'), t('home.errorUpdateStatus'));
     }
   };
 
@@ -128,9 +130,9 @@ export default function Home() {
         });
       }
       loadDashboard();
-      Alert.alert('Éxito', 'Medicamento marcado como saltado');
+      Alert.alert(t('common.success'), t('home.successSkipped'));
     } catch (error) {
-      Alert.alert('Error', 'No se pudo actualizar el estado');
+      Alert.alert(t('common.error'), t('home.errorUpdateStatus'));
     }
   };
 
@@ -157,7 +159,7 @@ export default function Home() {
   const groupByPatient = (medications: any[]): Record<string, any[]> => {
     const groups: Record<string, any[]> = {};
     for (const med of medications) {
-      const key = med.patient_name || 'Sin paciente';
+      const key = med.patient_name || t('common.unknown');
       if (!groups[key]) groups[key] = [];
       groups[key].push(med);
     }
@@ -175,9 +177,9 @@ export default function Home() {
     const diffMins = Math.floor(diffMs / 60000);
     const h = Math.floor(diffMins / 60);
     const m = diffMins % 60;
-    if (h > 0 && m > 0) return `en ${h}h ${m}min`;
-    if (h > 0) return `en ${h}h`;
-    return `en ${m}min`;
+    if (h > 0 && m > 0) return t('home.inTime', { time: `${h}h ${m}min` });
+    if (h > 0) return t('home.inTime', { time: `${h}h` });
+    return t('home.inTime', { time: `${m}min` });
   };
 
   const visibleMeds = getVisibleMedications(dashboard.medications_today);
@@ -187,7 +189,7 @@ export default function Home() {
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <View style={styles.header}>
         <View>
-          <Text style={styles.greeting}>Hola, {user?.name} 👋</Text>
+          <Text style={styles.greeting}>{t('home.greeting', { name: user?.name })}</Text>
           <Text style={styles.date}>{new Date().toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</Text>
         </View>
       </View>
@@ -196,17 +198,17 @@ export default function Home() {
         <View style={[styles.statCard, { backgroundColor: '#4CAF50' }]}>
           <Ionicons name="checkmark-circle" size={32} color="white" />
           <Text style={styles.statNumber}>{dashboard.completed}</Text>
-          <Text style={styles.statLabel}>Completados</Text>
+          <Text style={styles.statLabel}>{t('home.completed')}</Text>
         </View>
         <View style={[styles.statCard, { backgroundColor: '#2196F3' }]}>
           <Ionicons name="time" size={32} color="white" />
           <Text style={styles.statNumber}>{dashboard.pending}</Text>
-          <Text style={styles.statLabel}>Pendientes</Text>
+          <Text style={styles.statLabel}>{t('home.pending')}</Text>
         </View>
         <View style={[styles.statCard, { backgroundColor: '#f44336' }]}>
           <Ionicons name="close-circle" size={32} color="white" />
           <Text style={styles.statNumber}>{dashboard.missed}</Text>
-          <Text style={styles.statLabel}>Perdidos</Text>
+          <Text style={styles.statLabel}>{t('home.missed')}</Text>
         </View>
       </View>
 
@@ -224,7 +226,7 @@ export default function Home() {
             <View style={styles.nextDoseCard}>
               <View style={styles.nextDoseHeader}>
                 <Ionicons name="time-outline" size={18} color="#2196F3" />
-                <Text style={styles.nextDoseLabel}>Próxima toma</Text>
+                <Text style={styles.nextDoseLabel}>{t('home.nextDoseTitle')}</Text>
               </View>
               <Text style={styles.nextDoseMed}>{nextDose.medication_name}</Text>
               <Text style={styles.nextDoseTime}>
@@ -240,18 +242,18 @@ export default function Home() {
 
         {retrying && (
           <View style={styles.retryingBanner}>
-            <Text style={styles.retryingText}>Conectando con el servidor...</Text>
+            <Text style={styles.retryingText}>{t('home.connectingServer')}</Text>
           </View>
         )}
 
-        <Text style={styles.sectionTitle}>Medicamentos de Hoy</Text>
+        <Text style={styles.sectionTitle}>{t('home.medicationsToday')}</Text>
 
         {loading ? (
-          <Text style={styles.emptyText}>Cargando...</Text>
+          <Text style={styles.emptyText}>{t('common.loading')}</Text>
         ) : visibleMeds.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="checkmark-circle-outline" size={64} color="#ccc" />
-            <Text style={styles.emptyText}>No hay medicamentos programados para hoy</Text>
+            <Text style={styles.emptyText}>{t('home.noMedicationsToday')}</Text>
           </View>
         ) : (
           Object.entries(patientGroups).map(([patientName, meds]) => (
@@ -278,7 +280,7 @@ export default function Home() {
 
         {upcomingDays.length > 0 && (
           <View style={styles.upcomingSection}>
-            <Text style={styles.upcomingTitle}>Próximos Días</Text>
+            <Text style={styles.upcomingTitle}>{t('home.upcomingDays')}</Text>
             {upcomingDays.map((day) => (
               <View key={day.date}>
                 <View style={styles.upcomingDayHeader}>

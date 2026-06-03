@@ -16,10 +16,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AuthContext';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useTranslation } from 'react-i18next';
 
 const ONBOARDING_KEY = '@medcontrol_onboarding_complete';
 
 export default function Index() {
+  const { t } = useTranslation();
   const { login, register, user, loading: authLoading } = useAuth();
   const [isLogin, setIsLogin] = useState(true);
   const [name, setName] = useState('');
@@ -55,7 +57,7 @@ export default function Index() {
 
   const handleSubmit = async () => {
     if (!email || !password || (!isLogin && !name)) {
-      Alert.alert('Error', 'Por favor completa todos los campos');
+      Alert.alert(t('common.error'), t('auth.fillAllFields'));
       return;
     }
 
@@ -102,7 +104,7 @@ export default function Index() {
             </View>
             <Text style={styles.title}>MedControl</Text>
             <Text style={styles.subtitle}>
-              {isLogin ? 'Inicia sesión para continuar' : 'Crea tu cuenta'}
+              {isLogin ? t('auth.loginSubtitle') : t('auth.registerSubtitle')}
             </Text>
           </View>
 
@@ -112,7 +114,7 @@ export default function Index() {
                 <Ionicons name="person-outline" size={20} color="#666" style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
-                  placeholder="Nombre completo"
+                  placeholder={t('auth.namePlaceholder')}
                   placeholderTextColor="#999"
                   value={name}
                   onChangeText={setName}
@@ -125,7 +127,7 @@ export default function Index() {
               <Ionicons name="mail-outline" size={20} color="#666" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="Correo electrónico"
+                placeholder={t('auth.emailPlaceholder')}
                 placeholderTextColor="#999"
                 value={email}
                 onChangeText={setEmail}
@@ -138,7 +140,7 @@ export default function Index() {
               <Ionicons name="lock-closed-outline" size={20} color="#666" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="Contraseña"
+                placeholder={t('auth.passwordPlaceholder')}
                 placeholderTextColor="#999"
                 value={password}
                 onChangeText={setPassword}
@@ -152,7 +154,7 @@ export default function Index() {
               disabled={loading}
             >
               <Text style={styles.buttonText}>
-                {loading ? 'Procesando...' : (isLogin ? 'Iniciar Sesión' : 'Registrarse')}
+                {loading ? t('auth.processing') : (isLogin ? t('auth.login') : t('auth.register'))}
               </Text>
             </TouchableOpacity>
 
@@ -161,7 +163,7 @@ export default function Index() {
               onPress={() => setIsLogin(!isLogin)}
             >
               <Text style={styles.switchText}>
-                {isLogin ? '¿No tienes cuenta? Regístrate' : '¿Ya tienes cuenta? Inicia sesión'}
+                {isLogin ? `${t('auth.noAccount')} ${t('auth.register')}` : `${t('auth.hasAccount')} ${t('auth.login')}`}
               </Text>
             </TouchableOpacity>
           </View>

@@ -205,11 +205,11 @@ export default function SettingsScreen() {
 
         {/* Sección de Cuenta */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Cuenta</Text>
-          
+          <Text style={styles.sectionTitle}>{t('settings.account')}</Text>
+
           <MenuItem
             icon="log-out"
-            title="Cerrar Sesión"
+            title={t('auth.logout')}
             onPress={handleLogout}
             showArrow={false}
             color="#f44336"
@@ -219,8 +219,8 @@ export default function SettingsScreen() {
 
           <MenuItem
             icon="trash"
-            title="Eliminar Cuenta"
-            subtitle="Borra tu cuenta y todos tus datos"
+            title={t('settings.deleteAccount')}
+            subtitle={t('settings.deleteAccountDesc')}
             onPress={() => setDeleteModalVisible(true)}
             showArrow={false}
             color="#b71c1c"
@@ -243,7 +243,7 @@ export default function SettingsScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Sobre MedControl</Text>
+              <Text style={styles.modalTitle}>{t('about.title')}</Text>
               <TouchableOpacity
                 onPress={() => setAboutModalVisible(false)}
                 style={styles.closeButton}
@@ -266,76 +266,49 @@ export default function SettingsScreen() {
               <View style={styles.aboutSection}>
                 <View style={styles.aboutSectionHeader}>
                   <Ionicons name="heart" size={20} color="#E91E63" />
-                  <Text style={styles.aboutSectionTitle}>Nuestro Propósito</Text>
+                  <Text style={styles.aboutSectionTitle}>{t('about.purpose')}</Text>
                 </View>
-                <Text style={styles.aboutText}>
-                  MedControl nació con una misión clara: ayudar a cuidadores y familias a gestionar 
-                  los medicamentos de sus seres queridos de forma simple, organizada y confiable.
-                </Text>
-                <Text style={styles.aboutText}>
-                  Sabemos lo importante que es no olvidar una dosis, y por eso creamos esta 
-                  herramienta para que el cuidado sea más fácil y seguro.
-                </Text>
+                <Text style={styles.aboutText}>{t('about.purposeText1')}</Text>
+                <Text style={styles.aboutText}>{t('about.purposeText2')}</Text>
               </View>
 
               {/* Desarrollador */}
               <View style={styles.aboutSection}>
                 <View style={styles.aboutSectionHeader}>
                   <Ionicons name="code-slash" size={20} color="#2196F3" />
-                  <Text style={styles.aboutSectionTitle}>Desarrollador</Text>
+                  <Text style={styles.aboutSectionTitle}>{t('about.developer')}</Text>
                 </View>
-                <Text style={styles.aboutText}>
-                  Esta aplicación es un proyecto independiente, desarrollado con dedicación y 
-                  el compromiso de ofrecer una herramienta útil y accesible para todos.
-                </Text>
-                <Text style={styles.aboutText}>
-                  💙 Creado con amor para quienes cuidan de otros.
-                </Text>
+                <Text style={styles.aboutText}>{t('about.developerText1')}</Text>
+                <Text style={styles.aboutText}>{t('about.developerText2')}</Text>
               </View>
 
               {/* App 100% Gratuita */}
               <View style={styles.aboutSection}>
                 <View style={styles.aboutSectionHeader}>
                   <Ionicons name="gift" size={20} color="#4CAF50" />
-                  <Text style={styles.aboutSectionTitle}>100% Gratuita</Text>
+                  <Text style={styles.aboutSectionTitle}>{t('about.freeApp')}</Text>
                 </View>
-                <Text style={styles.aboutText}>
-                  MedControl es y será siempre gratuita. Sin anuncios invasivos, sin funciones 
-                  bloqueadas, sin suscripciones ocultas.
-                </Text>
-                <Text style={styles.aboutText}>
-                  Si deseas apoyar el desarrollo continuo de esta app, puedes hacerlo de 
-                  forma voluntaria desde la sección &quot;Apoyar el Proyecto&quot;.
-                </Text>
+                <Text style={styles.aboutText}>{t('about.freeAppText1')}</Text>
+                <Text style={styles.aboutText}>{t('about.freeAppText2')}</Text>
               </View>
 
               {/* Disclaimer Médico */}
               <View style={[styles.aboutSection, styles.disclaimerSection]}>
                 <View style={styles.aboutSectionHeader}>
                   <Ionicons name="warning" size={20} color="#FF9800" />
-                  <Text style={styles.aboutSectionTitle}>Aviso Importante</Text>
+                  <Text style={styles.aboutSectionTitle}>{t('about.importantNotice')}</Text>
                 </View>
-                <Text style={styles.disclaimerText}>
-                  ⚠️ Esta aplicación es una herramienta de organización y recordatorio. 
-                  NO reemplaza el consejo, diagnóstico o tratamiento médico profesional.
-                </Text>
-                <Text style={styles.disclaimerText}>
-                  Siempre consulta con un profesional de la salud antes de tomar decisiones 
-                  sobre medicamentos. La información proporcionada por el asistente IA es 
-                  solo orientativa.
-                </Text>
+                <Text style={styles.disclaimerText}>{t('about.disclaimer1')}</Text>
+                <Text style={styles.disclaimerText}>{t('about.disclaimer2')}</Text>
               </View>
 
               {/* Privacidad */}
               <View style={styles.aboutSection}>
                 <View style={styles.aboutSectionHeader}>
                   <Ionicons name="shield-checkmark" size={20} color="#9C27B0" />
-                  <Text style={styles.aboutSectionTitle}>Tu Privacidad</Text>
+                  <Text style={styles.aboutSectionTitle}>{t('about.privacy')}</Text>
                 </View>
-                <Text style={styles.aboutText}>
-                  Tus datos son tuyos. La información de tus pacientes y medicamentos se 
-                  almacena de forma segura y nunca se comparte con terceros.
-                </Text>
+                <Text style={styles.aboutText}>{t('about.privacyText')}</Text>
               </View>
 
               {/* Botón de donación */}
@@ -347,7 +320,7 @@ export default function SettingsScreen() {
                 }}
               >
                 <Ionicons name="heart" size={20} color="white" />
-                <Text style={styles.supportButtonText}>Apoyar el Proyecto ❤️</Text>
+                <Text style={styles.supportButtonText}>{t('settings.supportProject')} ❤️</Text>
               </TouchableOpacity>
 
               <View style={styles.modalFooterSpace} />
@@ -366,7 +339,7 @@ export default function SettingsScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.donateModalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Apoyar el Proyecto</Text>
+              <Text style={styles.modalTitle}>{t('donate.title')}</Text>
               <TouchableOpacity
                 onPress={() => setDonateModalVisible(false)}
                 style={styles.closeButton}
@@ -381,35 +354,33 @@ export default function SettingsScreen() {
                 <View style={styles.donateHeartIcon}>
                   <Ionicons name="heart" size={40} color="#E91E63" />
                 </View>
-                <Text style={styles.donateTitle}>¡Gracias por considerar apoyarnos!</Text>
-                <Text style={styles.donateSubtitle}>
-                  Tu apoyo voluntario ayuda a mantener MedControl gratuita y en constante mejora.
-                </Text>
+                <Text style={styles.donateTitle}>{t('donate.thanks')}</Text>
+                <Text style={styles.donateSubtitle}>{t('donate.subtitle')}</Text>
               </View>
 
               {/* Qué logras con tu apoyo */}
               <View style={styles.donateInfoSection}>
-                <Text style={styles.donateInfoTitle}>Con tu apoyo ayudas a:</Text>
+                <Text style={styles.donateInfoTitle}>{t('donate.helpsWith')}</Text>
                 <View style={styles.donateInfoItem}>
                   <Ionicons name="checkmark-circle" size={18} color="#4CAF50" />
-                  <Text style={styles.donateInfoText}>Mantener la app sin anuncios</Text>
+                  <Text style={styles.donateInfoText}>{t('donate.noAds')}</Text>
                 </View>
                 <View style={styles.donateInfoItem}>
                   <Ionicons name="checkmark-circle" size={18} color="#4CAF50" />
-                  <Text style={styles.donateInfoText}>Desarrollar nuevas funciones</Text>
+                  <Text style={styles.donateInfoText}>{t('donate.newFeatures')}</Text>
                 </View>
                 <View style={styles.donateInfoItem}>
                   <Ionicons name="checkmark-circle" size={18} color="#4CAF50" />
-                  <Text style={styles.donateInfoText}>Cubrir costos de servidores</Text>
+                  <Text style={styles.donateInfoText}>{t('donate.serverCosts')}</Text>
                 </View>
                 <View style={styles.donateInfoItem}>
                   <Ionicons name="checkmark-circle" size={18} color="#4CAF50" />
-                  <Text style={styles.donateInfoText}>Que más personas accedan gratis</Text>
+                  <Text style={styles.donateInfoText}>{t('donate.freeAccess')}</Text>
                 </View>
               </View>
 
               {/* Opciones de donación */}
-              <Text style={styles.donateOptionsTitle}>Elige tu método preferido:</Text>
+              <Text style={styles.donateOptionsTitle}>{t('donate.chooseMethod')}</Text>
 
               <TouchableOpacity 
                 style={[styles.donateOption, { backgroundColor: '#0070BA' }]}
@@ -431,13 +402,8 @@ export default function SettingsScreen() {
 
               {/* Mensaje de gratitud */}
               <View style={styles.gratitudeSection}>
-                <Text style={styles.gratitudeText}>
-                  💙 Cada aporte, sin importar el monto, significa mucho y nos motiva a seguir mejorando.
-                </Text>
-                <Text style={styles.gratitudeText}>
-                  Si no puedes donar, no te preocupes. También ayudas muchísimo compartiendo 
-                  la app con quienes la necesiten o dejando una reseña positiva.
-                </Text>
+                <Text style={styles.gratitudeText}>{t('donate.gratitude1')}</Text>
+                <Text style={styles.gratitudeText}>{t('donate.gratitude2')}</Text>
               </View>
 
               <View style={styles.modalFooterSpace} />

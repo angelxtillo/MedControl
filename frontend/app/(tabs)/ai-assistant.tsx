@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../../utils/api';
+import { useTranslation } from 'react-i18next';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -21,11 +22,9 @@ interface Message {
 }
 
 export default function AIAssistant() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: 'assistant',
-      content: '¡Hola! Soy tu asistente de medicamentos. Puedo ayudarte con información sobre medicamentos, interacciones, efectos secundarios y consejos generales. ¿En qué puedo ayudarte?',
-    },
+  const { t } = useTranslation();
+  const [messages, setMessages] = useState<Message[]>(() => [
+    { role: 'assistant', content: t('assistant.greeting') },
   ]);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
@@ -55,7 +54,7 @@ export default function AIAssistant() {
 
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (error: any) {
-      Alert.alert('Error', 'No se pudo obtener respuesta del asistente');
+      Alert.alert(t('common.error'), t('assistant.errorResponse'));
       console.error('AI Error:', error);
     } finally {
       setLoading(false);
@@ -63,10 +62,10 @@ export default function AIAssistant() {
   };
 
   const suggestedQuestions = [
-    '¿Cuáles son los efectos secundarios comunes del ibuprofeno?',
-    '¿Puedo tomar paracetamol con antibióticos?',
-    '¿Cómo debo almacenar los medicamentos?',
-    '¿Qué hacer si olvido tomar una dosis?',
+    t('assistant.q1'),
+    t('assistant.q2'),
+    t('assistant.q3'),
+    t('assistant.q4'),
   ];
 
   return (
@@ -75,21 +74,21 @@ export default function AIAssistant() {
         <View style={styles.disclaimerModal}>
           <View style={styles.disclaimerCard}>
             <Ionicons name="warning" size={48} color="#FF9800" />
-            <Text style={styles.disclaimerTitle}>⚕️ Aviso Importante</Text>
+            <Text style={styles.disclaimerTitle}>{t('assistant.disclaimerTitle')}</Text>
             <Text style={styles.disclaimerText}>
-              Esta herramienta proporciona información general sobre medicamentos con fines educativos únicamente.
+              {t('assistant.disclaimerInfo')}
             </Text>
             <Text style={styles.disclaimerTextBold}>
-              NO sustituye el consejo, diagnóstico o tratamiento médico profesional.
+              {t('assistant.disclaimerWarning')}
             </Text>
             <Text style={styles.disclaimerText}>
-              Consulta siempre con tu médico o farmacéutico antes de tomar decisiones sobre medicamentos.
+              {t('assistant.disclaimerAdvice')}
             </Text>
             <TouchableOpacity
               style={styles.disclaimerButton}
               onPress={() => setDisclaimerRead(true)}
             >
-              <Text style={styles.disclaimerButtonText}>Entendido</Text>
+              <Text style={styles.disclaimerButtonText}>{t('assistant.understood')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -138,7 +137,7 @@ export default function AIAssistant() {
 
           {messages.length === 1 && (
             <View style={styles.suggestionsContainer}>
-              <Text style={styles.suggestionsTitle}>Preguntas sugeridas:</Text>
+              <Text style={styles.suggestionsTitle}>{t('assistant.suggestedTitle')}</Text>
               {suggestedQuestions.map((question, index) => (
                 <TouchableOpacity
                   key={index}
@@ -158,7 +157,7 @@ export default function AIAssistant() {
         <View style={styles.inputContainer}>
           <TextInput
             style={styles.input}
-            placeholder="Escribe tu pregunta..."
+            placeholder={t('assistant.placeholder')}
             value={inputText}
             onChangeText={setInputText}
             multiline
@@ -177,7 +176,7 @@ export default function AIAssistant() {
       <View style={styles.disclaimer}>
         <Ionicons name="information-circle-outline" size={16} color="#999" />
         <Text style={styles.disclaimerText}>
-          Este asistente proporciona información general. Consulta a un profesional de salud.
+          {t('assistant.bottomDisclaimer')}
         </Text>
       </View>
     </SafeAreaView>

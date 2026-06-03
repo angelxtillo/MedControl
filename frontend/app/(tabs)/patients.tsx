@@ -17,6 +17,7 @@ import { PatientCard } from '../../components/PatientCard';
 import { router, useFocusEffect } from 'expo-router';
 import api from '../../utils/api';
 import * as ImagePicker from 'expo-image-picker';
+import { useTranslation } from 'react-i18next';
 
 interface Patient {
   id: string;
@@ -27,6 +28,7 @@ interface Patient {
 }
 
 export default function Patients() {
+  const { t } = useTranslation();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
@@ -48,7 +50,7 @@ export default function Patients() {
       const response = await api.get('/patients');
       setPatients(response.data);
     } catch (error) {
-      Alert.alert('Error', 'No se pudieron cargar los pacientes');
+      Alert.alert(t('common.error'), t('patients.errorLoad'));
     } finally {
       setRefreshing(false);
     }
@@ -75,36 +77,34 @@ export default function Patients() {
 
   const handleAddPatient = async () => {
     if (!name) {
-      Alert.alert('Error', 'El nombre es requerido');
+      Alert.alert(t('common.error'), t('patients.nameRequired'));
       return;
     }
 
     setLoading(true);
     try {
       if (editingPatient) {
-        // Actualizar paciente existente
         await api.put(`/patients/${editingPatient.id}`, {
           name,
           age: age ? parseInt(age) : null,
           notes,
           photo,
         });
-        Alert.alert('Éxito', 'Paciente actualizado correctamente');
+        Alert.alert(t('common.success'), t('patients.patientUpdated'));
       } else {
-        // Crear nuevo paciente
         await api.post('/patients', {
           name,
           age: age ? parseInt(age) : null,
           notes,
           photo,
         });
-        Alert.alert('Éxito', 'Paciente agregado correctamente');
+        Alert.alert(t('common.success'), t('patients.patientAdded'));
       }
       setModalVisible(false);
       resetForm();
       loadPatients();
     } catch (error) {
-      Alert.alert('Error', editingPatient ? 'No se pudo actualizar el paciente' : 'No se pudo agregar el paciente');
+      Alert.alert(t('common.error'), editingPatient ? t('patients.errorUpdate') : t('patients.errorCreate'));
     } finally {
       setLoading(false);
     }
@@ -138,8 +138,8 @@ export default function Patients() {
         {patients.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="people-outline" size={64} color="#ccc" />
-            <Text style={styles.emptyText}>No hay pacientes aún</Text>
-            <Text style={styles.emptySubtext}>Agrega tu primer paciente para comenzar</Text>
+            <Text style={styles.emptyText}>{t('patients.noPatients')}</Text>
+            <Text style={styles.emptySubtext}>{t('patients.addFirstPatient')}</Text>
           </View>
         ) : (
           patients.map((patient) => (
@@ -176,7 +176,7 @@ export default function Patients() {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
-                {editingPatient ? 'Editar Paciente' : 'Agregar Paciente'}
+                {editingPatient ? t('patients.editPatient') : t('patients.addPatient')}
               </Text>
               <TouchableOpacity onPress={() => {
                 setModalVisible(false);
@@ -193,26 +193,26 @@ export default function Patients() {
                 ) : (
                   <View style={styles.photoPlaceholder}>
                     <Ionicons name="camera" size={32} color="#999" />
-                    <Text style={styles.photoText}>Agregar Foto</Text>
+                    <Text style={styles.photoText}>{t('patients.addPhoto')}</Text>
                   </View>
                 )}
               </TouchableOpacity>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Nombre *</Text>
+                <Text style={styles.label}>{t('patients.name')} *</Text>
                 <TextInput
                   style={styles.input}
-                  placeholder="Nombre completo"
+                  placeholder={t('auth.fullName')}
                   value={name}
                   onChangeText={setName}
                 />
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Edad</Text>
+                <Text style={styles.label}>{t('patients.age')}</Text>
                 <TextInput
                   style={styles.input}
-                  placeholder="Años"
+                  placeholder={t('patients.years')}
                   value={age}
                   onChangeText={setAge}
                   keyboardType="number-pad"
@@ -220,10 +220,10 @@ export default function Patients() {
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Notas</Text>
+                <Text style={styles.label}>{t('patients.notes')}</Text>
                 <TextInput
                   style={[styles.input, styles.textArea]}
-                  placeholder="Notas adicionales"
+                  placeholder={t('patients.additionalNotes')}
                   value={notes}
                   onChangeText={setNotes}
                   multiline
@@ -237,7 +237,7 @@ export default function Patients() {
                 disabled={loading}
               >
                 <Text style={styles.saveButtonText}>
-                  {loading ? 'Guardando...' : (editingPatient ? 'Actualizar Paciente' : 'Guardar Paciente')}
+                  {loading ? t('patients.saving') : t('common.save')}
                 </Text>
               </TouchableOpacity>
             </ScrollView>

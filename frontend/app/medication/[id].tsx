@@ -16,14 +16,35 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, router } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import api from '../../utils/api';
+import { useTranslation } from 'react-i18next';
+
+// Labels must remain in Spanish — stored as-is in MongoDB and matched on load
+const FREQUENCY_OPTIONS = [
+  { label: 'Cada 4 horas', value: 'every_4h', hours: 4 },
+  { label: 'Cada 6 horas', value: 'every_6h', hours: 6 },
+  { label: 'Cada 8 horas', value: 'every_8h', hours: 8 },
+  { label: 'Cada 12 horas', value: 'every_12h', hours: 12 },
+  { label: 'Una vez al día', value: 'once_daily', hours: 24 },
+  { label: 'Personalizado', value: 'custom', hours: 0 },
+];
+
+// Day names must remain in Spanish — used to reconstruct frequency strings stored in MongoDB
+const DAY_NAMES: Record<string, string> = {
+  Lu: 'Lunes', Ma: 'Martes', Mi: 'Miércoles',
+  Ju: 'Jueves', Vi: 'Viernes', Sa: 'Sábado', Do: 'Domingo',
+};
 
 export default function EditMedication() {
   const { id } = useLocalSearchParams();
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState('');
   const [dosage, setDosage] = useState('');
-  const [frequency, setFrequency] = useState('');
+  const [selectedFreq, setSelectedFreq] = useState('');
+  const [customType, setCustomType] = useState<'hours' | 'days' | null>(null);
+  const [customHours, setCustomHours] = useState(3);
+  const [selectedDays, setSelectedDays] = useState<string[]>([]);
   const [scheduleTimes, setScheduleTimes] = useState<string[]>(['']);
   const [endDate, setEndDate] = useState('');
   const [instructions, setInstructions] = useState('');
@@ -37,7 +58,6 @@ export default function EditMedication() {
 
   const loadMedication = async () => {
     try {
-      // Get all medications and find the one we need
       const patientsResponse = await api.get('/patients');
       for (const patient of patientsResponse.data) {
         const medsResponse = await api.get(`/medications/patient/${patient.id}`);
@@ -45,7 +65,26 @@ export default function EditMedication() {
         if (medication) {
           setName(medication.name);
           setDosage(medication.dosage);
-          setFrequency(medication.frequency);
+          const matchedOpt = FREQUENCY_OPTIONS.find(o => o.label === medication.frequency);
+          if (matchedOpt) {
+            setSelectedFreq(matchedOpt.value);
+          } else {
+            setSelectedFreq('custom');
+            const hoursMatch = medication.frequency.match(/^Cada (\d+) horas?$/);
+            if (hoursMatch) {
+              setCustomType('hours');
+              setCustomHours(parseInt(hoursMatch[1], 10));
+            } else {
+              const dayParts = medication.frequency.split(', ');
+              const days = dayParts.map((p: string) =>
+                Object.keys(DAY_NAMES).find(k => DAY_NAMES[k] === p) || ''
+              ).filter(Boolean);
+              if (days.length > 0) {
+                setCustomType('days');
+                setSelectedDays(days);
+              }
+            }
+          }
           setScheduleTimes(medication.schedule_times);
           setEndDate(medication.end_date || '');
           setInstructions(medication.instructions || '');
@@ -54,7 +93,7 @@ export default function EditMedication() {
         }
       }
     } catch (error) {
-      Alert.alert('Error', 'No se pudo cargar el medicamento');
+      Alert.alert(t('common.error'), t('medications.errorLoad'));
     } finally {
       setLoading(false);
     }
@@ -101,34 +140,73 @@ export default function EditMedication() {
     return now;
   };
 
+  // Returns Spanish string — stored as-is in MongoDB and matched by loadMedication()
+  const getFrequencyLabel = (): string => {
+    if (selectedFreq === 'custom') {
+      if (customType === 'hours') return `Cada ${customHours} horas`;
+      if (customType === 'days') return selectedDays.map(d => DAY_NAMES[d]).join(', ') || 'Personalizado';
+      return 'Personalizado';
+    }
+    return FREQUENCY_OPTIONS.find(f => f.value === selectedFreq)?.label || '';
+  };
+
+  const expandScheduleTimes = (baseTime: string): string[] => {
+    let intervalHours: number;
+    if (selectedFreq === 'custom' && customType === 'hours') {
+      intervalHours = customHours;
+    } else {
+      const freqOpt = FREQUENCY_OPTIONS.find(f => f.value === selectedFreq);
+      if (!freqOpt || freqOpt.hours === 0 || freqOpt.hours >= 24) return scheduleTimes;
+      intervalHours = freqOpt.hours;
+    }
+    const parts = baseTime.split(':');
+    const baseMinutes = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+    const intervalMinutes = intervalHours * 60;
+    const times: string[] = [];
+    let current = baseMinutes;
+    while (current < 1440) {
+      times.push(`${Math.floor(current / 60).toString().padStart(2, '0')}:${(current % 60).toString().padStart(2, '0')}`);
+      current += intervalMinutes;
+    }
+    return times;
+  };
+
   const handleSave = async () => {
-    if (!name || !dosage || !frequency) {
-      Alert.alert('Error', 'Por favor completa todos los campos obligatorios');
+    if (!name || !dosage || !selectedFreq) {
+      Alert.alert(t('common.error'), t('medications.fillRequired'));
       return;
     }
 
     const validTimes = scheduleTimes.filter(t => t.trim() !== '');
     if (validTimes.length === 0) {
-      Alert.alert('Error', 'Agrega al menos un horario');
+      Alert.alert(t('common.error'), t('medications.addAtLeastOneSchedule'));
       return;
     }
+
+    const freqOpt = FREQUENCY_OPTIONS.find(f => f.value === selectedFreq);
+    const shouldExpand =
+      (freqOpt && freqOpt.hours > 0 && freqOpt.hours < 24) ||
+      (selectedFreq === 'custom' && customType === 'hours');
+    const finalTimes = shouldExpand && validTimes.length > 0
+      ? expandScheduleTimes(validTimes[0])
+      : validTimes;
 
     setSaving(true);
     try {
       await api.put(`/medications/${id}`, {
         name,
         dosage,
-        frequency,
-        schedule_times: validTimes,
+        frequency: getFrequencyLabel(),
+        schedule_times: finalTimes,
         end_date: endDate || null,
         instructions: instructions || null,
         active,
       });
 
-      Alert.alert('Éxito', 'Medicamento actualizado correctamente');
+      Alert.alert(t('common.success'), t('medications.medicationUpdated'));
       router.back();
     } catch (error) {
-      Alert.alert('Error', 'No se pudo actualizar el medicamento');
+      Alert.alert(t('common.error'), t('medications.errorUpdate'));
     } finally {
       setSaving(false);
     }
@@ -150,7 +228,7 @@ export default function EditMedication() {
       >
         <ScrollView style={styles.content}>
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Nombre del Medicamento *</Text>
+            <Text style={styles.label}>{t('medications.name')} *</Text>
             <TextInput
               style={styles.input}
               placeholder="Ej: Paracetamol"
@@ -160,7 +238,7 @@ export default function EditMedication() {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Dosis *</Text>
+            <Text style={styles.label}>{t('medications.dosage')} *</Text>
             <TextInput
               style={styles.input}
               placeholder="Ej: 500mg"
@@ -170,21 +248,87 @@ export default function EditMedication() {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Frecuencia *</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Ej: Cada 8 horas"
-              value={frequency}
-              onChangeText={setFrequency}
-            />
+            <Text style={styles.label}>{t('medications.frequency')} *</Text>
+            <View style={styles.freqOptions}>
+              {FREQUENCY_OPTIONS.map(opt => (
+                <TouchableOpacity
+                  key={opt.value}
+                  style={[styles.freqOption, selectedFreq === opt.value && styles.freqOptionSelected]}
+                  onPress={() => setSelectedFreq(opt.value)}
+                >
+                  <View style={[styles.freqRadio, selectedFreq === opt.value && styles.freqRadioSelected]}>
+                    {selectedFreq === opt.value && <View style={styles.freqRadioInner} />}
+                  </View>
+                  <Text style={[styles.freqOptionText, selectedFreq === opt.value && styles.freqOptionTextSelected]}>
+                    {opt.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {selectedFreq === 'custom' && (
+              <View style={styles.customContainer}>
+                <View style={styles.customTypeRow}>
+                  <TouchableOpacity
+                    style={[styles.customTypeButton, customType === 'hours' && styles.customTypeButtonSelected]}
+                    onPress={() => setCustomType('hours')}
+                  >
+                    <Ionicons name="time-outline" size={16} color={customType === 'hours' ? '#2196F3' : '#666'} />
+                    <Text style={[styles.customTypeText, customType === 'hours' && styles.customTypeTextSelected]}>
+                      {t('medications.everyXHours')}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.customTypeButton, customType === 'days' && styles.customTypeButtonSelected]}
+                    onPress={() => setCustomType('days')}
+                  >
+                    <Ionicons name="calendar-outline" size={16} color={customType === 'days' ? '#2196F3' : '#666'} />
+                    <Text style={[styles.customTypeText, customType === 'days' && styles.customTypeTextSelected]}>
+                      {t('medications.daysOfWeek')}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {customType === 'hours' && (
+                  <View style={styles.hoursRow}>
+                    <TouchableOpacity style={styles.hourBtn} onPress={() => setCustomHours(h => Math.max(1, h - 1))}>
+                      <Text style={styles.hourBtnText}>−</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.hoursVal}>{customHours}</Text>
+                    <TouchableOpacity style={styles.hourBtn} onPress={() => setCustomHours(h => Math.min(23, h + 1))}>
+                      <Text style={styles.hourBtnText}>+</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.hoursUnit}>{t('medications.hoursUnit')}</Text>
+                  </View>
+                )}
+
+                {customType === 'days' && (
+                  <View style={styles.daysRow}>
+                    {['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sa', 'Do'].map(day => (
+                      <TouchableOpacity
+                        key={day}
+                        style={[styles.dayBtn, selectedDays.includes(day) && styles.dayBtnSelected]}
+                        onPress={() => setSelectedDays(prev =>
+                          prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]
+                        )}
+                      >
+                        <Text style={[styles.dayBtnText, selectedDays.includes(day) && styles.dayBtnTextSelected]}>
+                          {day}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+            )}
           </View>
 
           <View style={styles.inputGroup}>
             <View style={styles.labelRow}>
-              <Text style={styles.label}>Horarios *</Text>
+              <Text style={styles.label}>{t('medications.schedule')} *</Text>
               <TouchableOpacity onPress={addTimeSlot} style={styles.addTimeButton}>
                 <Ionicons name="add-circle" size={24} color="#2196F3" />
-                <Text style={styles.addTimeText}>Agregar Horario</Text>
+                <Text style={styles.addTimeText}>{t('medications.addSchedule2')}</Text>
               </TouchableOpacity>
             </View>
             {scheduleTimes.map((time, index) => (
@@ -195,7 +339,7 @@ export default function EditMedication() {
                 >
                   <Ionicons name="time-outline" size={20} color="#2196F3" />
                   <Text style={styles.timeButtonText}>
-                    {time || 'Seleccionar hora'}
+                    {time || t('medications.selectTime')}
                   </Text>
                 </TouchableOpacity>
                 {scheduleTimes.length > 1 && (
@@ -217,7 +361,7 @@ export default function EditMedication() {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Fecha de Fin (opcional)</Text>
+            <Text style={styles.label}>{t('medications.endDateOptional')}</Text>
             <TextInput
               style={styles.input}
               placeholder="AAAA-MM-DD"
@@ -227,7 +371,7 @@ export default function EditMedication() {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Instrucciones (opcional)</Text>
+            <Text style={styles.label}>{t('medications.instructionsOptional')}</Text>
             <TextInput
               style={[styles.input, styles.textArea]}
               placeholder="Ej: Tomar con alimentos"
@@ -240,7 +384,7 @@ export default function EditMedication() {
 
           <View style={styles.inputGroup}>
             <View style={styles.switchRow}>
-              <Text style={styles.label}>Medicamento Activo</Text>
+              <Text style={styles.label}>{t('medications.medicationActive')}</Text>
               <TouchableOpacity
                 onPress={() => setActive(!active)}
                 style={[styles.switch, active && styles.switchActive]}
@@ -257,7 +401,7 @@ export default function EditMedication() {
           >
             <Ionicons name="checkmark-circle" size={24} color="white" />
             <Text style={styles.saveButtonText}>
-              {saving ? 'Guardando...' : 'Guardar Cambios'}
+              {saving ? t('patients.saving') : t('medications.saveChanges')}
             </Text>
           </TouchableOpacity>
         </ScrollView>
@@ -376,5 +520,138 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     marginLeft: 8,
+  },
+  freqOptions: {
+    gap: 8,
+  },
+  freqOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  freqOptionSelected: {
+    borderColor: '#2196F3',
+    backgroundColor: '#E3F2FD',
+  },
+  freqRadio: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#ccc',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  freqRadioSelected: {
+    borderColor: '#2196F3',
+  },
+  freqRadioInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#2196F3',
+  },
+  freqOptionText: {
+    fontSize: 15,
+    color: '#212121',
+  },
+  freqOptionTextSelected: {
+    fontWeight: '500',
+    color: '#2196F3',
+  },
+  customContainer: {
+    marginTop: 10,
+    gap: 10,
+  },
+  customTypeRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  customTypeButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    backgroundColor: 'white',
+    gap: 6,
+  },
+  customTypeButtonSelected: {
+    borderColor: '#2196F3',
+    backgroundColor: '#E3F2FD',
+  },
+  customTypeText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#666',
+  },
+  customTypeTextSelected: {
+    color: '#2196F3',
+  },
+  hoursRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+    paddingVertical: 4,
+  },
+  hourBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#2196F3',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  hourBtnText: {
+    color: 'white',
+    fontSize: 22,
+    fontWeight: '600',
+    lineHeight: 26,
+  },
+  hoursVal: {
+    fontSize: 36,
+    fontWeight: 'bold',
+    color: '#212121',
+    minWidth: 44,
+    textAlign: 'center',
+  },
+  hoursUnit: {
+    fontSize: 15,
+    color: '#666',
+  },
+  daysRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  dayBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dayBtnSelected: {
+    backgroundColor: '#2196F3',
+    borderColor: '#2196F3',
+  },
+  dayBtnText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#666',
+  },
+  dayBtnTextSelected: {
+    color: 'white',
   },
 });
