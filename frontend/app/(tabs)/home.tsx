@@ -380,6 +380,7 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 16,
+    backgroundColor: '#f5f5f5',
   },
   sectionTitle: {
     fontSize: 20,
