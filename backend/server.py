@@ -711,32 +711,8 @@ async def update_log(
 # ============= DASHBOARD ENDPOINT =============
 @api_router.get("/dashboard/today")
 async def get_today_dashboard(user_id: str = Depends(get_current_user), timezone_offset: int = 0):
-    # Get all patients for this caregiver (without photos for performance)
-    patients = await db.patients.find(
-        {"caregiver_ids": user_id},
-        {"name": 1, "_id": 1}  # Only get needed fields
-    ).to_list(100)
-    patient_ids = [str(p["_id"]) for p in patients]
-    
-    if not patient_ids:
-        return {
-            "medications_today": [],
-            "completed": 0,
-            "pending": 0,
-            "missed": 0
-        }
-    
-    # Get all active medications for these patients
-    medications = await db.medications.find({
-        "patient_id": {"$in": patient_ids},
-        "active": True,
-        "start_date": {"$lte": today_str}
-    }).to_list(200)
-    
     now_local = datetime.utcnow() + timedelta(minutes=timezone_offset)
-    today = now_local.date()
-    today_str = today.isoformat()
-
+    today_str = now_local.date().isoformat()
     weekday_local = now_local.weekday()  # 0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri, 5=Sat, 6=Sun
 
     WEEKDAY_MAP = {
@@ -756,6 +732,28 @@ async def get_today_dashboard(user_id: str = Depends(get_current_user), timezone
             if day_name in frequency and day_num == weekday_local:
                 return True
         return False
+
+    # Get all patients for this caregiver (without photos for performance)
+    patients = await db.patients.find(
+        {"caregiver_ids": user_id},
+        {"name": 1, "_id": 1}  # Only get needed fields
+    ).to_list(100)
+    patient_ids = [str(p["_id"]) for p in patients]
+
+    if not patient_ids:
+        return {
+            "medications_today": [],
+            "completed": 0,
+            "pending": 0,
+            "missed": 0
+        }
+
+    # Get all active medications for these patients
+    medications = await db.medications.find({
+        "patient_id": {"$in": patient_ids},
+        "active": True,
+        "start_date": {"$lte": today_str}
+    }).to_list(200)
 
     medications = [m for m in medications if should_show_today(m, weekday_local)]
 
