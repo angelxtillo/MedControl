@@ -68,7 +68,7 @@ export default function SettingsScreen() {
 
   const handleAcceptInvitation = async () => {
     if (!inviteCode.trim()) {
-      Alert.alert('Error', 'Ingresa el código de invitación');
+      Alert.alert(t('common.error'), t('caregivers.acceptInvitationDesc'));
       return;
     }
     setAcceptingInvite(true);
@@ -77,9 +77,9 @@ export default function SettingsScreen() {
         code: inviteCode.trim().toUpperCase(),
       });
       Alert.alert(
-        '¡Bienvenido!',
-        `¡Ahora eres cuidador de ${response.data.patient_name}!`,
-        [{ text: 'Genial', onPress: () => { setInvitationModalVisible(false); setInviteCode(''); } }]
+        t('common.success'),
+        t('caregivers.nowCaregiver', { name: response.data.patient_name }),
+        [{ text: t('common.confirm'), onPress: () => { setInvitationModalVisible(false); setInviteCode(''); } }]
       );
     } catch (error: any) {
       const msg = error.response?.data?.detail || 'No se pudo aceptar la invitación';
@@ -236,8 +236,8 @@ export default function SettingsScreen() {
 
           <MenuItem
             icon="mail"
-            title="Aceptar Invitación"
-            subtitle="Ingresa un código para unirte como cuidador"
+            title={t('caregivers.acceptInvitation')}
+            subtitle={t('caregivers.inviteSubtitle')}
             onPress={() => setInvitationModalVisible(true)}
             iconBg="#E3F2FD"
             iconColor="#2196F3"
@@ -504,7 +504,7 @@ export default function SettingsScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Aceptar Invitación</Text>
+              <Text style={styles.modalTitle}>{t('caregivers.acceptInvitation')}</Text>
               <TouchableOpacity
                 onPress={() => { setInvitationModalVisible(false); setInviteCode(''); }}
                 style={styles.closeButton}
@@ -518,14 +518,14 @@ export default function SettingsScreen() {
                 <Ionicons name="mail-open" size={40} color="#2196F3" />
               </View>
               <Text style={styles.inviteDescription}>
-                Ingresa el código de 6 dígitos que recibiste por email para unirte como cuidador de un paciente.
+                {t('caregivers.acceptInvitationDesc')}
               </Text>
 
               <TextInput
                 style={styles.inviteCodeInput}
                 value={inviteCode}
                 onChangeText={(text) => setInviteCode(text.toUpperCase())}
-                placeholder="ABC123"
+                placeholder={t('caregivers.codePlaceholder')}
                 placeholderTextColor="#bbb"
                 maxLength={6}
                 autoCapitalize="characters"
@@ -541,7 +541,7 @@ export default function SettingsScreen() {
                 {acceptingInvite ? (
                   <ActivityIndicator color="white" />
                 ) : (
-                  <Text style={styles.inviteAcceptButtonText}>Aceptar</Text>
+                  <Text style={styles.inviteAcceptButtonText}>{t('caregivers.acceptCode')}</Text>
                 )}
               </TouchableOpacity>
 
@@ -549,7 +549,7 @@ export default function SettingsScreen() {
                 style={styles.inviteCancelButton}
                 onPress={() => { setInvitationModalVisible(false); setInviteCode(''); }}
               >
-                <Text style={styles.inviteCancelButtonText}>Cancelar</Text>
+                <Text style={styles.inviteCancelButtonText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
             </View>
           </View>

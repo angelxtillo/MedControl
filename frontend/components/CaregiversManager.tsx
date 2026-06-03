@@ -67,8 +67,8 @@ export default function CaregiversManager({
         invitee_email: inviteEmail.trim().toLowerCase(),
       });
       Alert.alert(
-        '✉️ Invitación enviada',
-        `Invitación enviada a ${inviteEmail.trim().toLowerCase()}. El cuidador recibirá un código por email.`
+        `✉️ ${t('caregivers.inviteSent')}`,
+        t('caregivers.inviteSentDesc')
       );
       setInviteEmail('');
       setModalVisible(false);
@@ -206,7 +206,7 @@ export default function CaregiversManager({
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{t('caregivers.addCaregiver')}</Text>
+              <Text style={styles.modalTitle}>{t('caregivers.inviteByEmail')}</Text>
               <TouchableOpacity
                 onPress={() => { setModalVisible(false); setDirectMode(false); setInviteEmail(''); }}
                 style={styles.closeButton}
@@ -219,10 +219,10 @@ export default function CaregiversManager({
               {!directMode ? (
                 <>
                   <Text style={styles.modalDescription}>
-                    Ingresa el email del cuidador para enviarle un código de invitación por email.
+                    {t('caregivers.inviteDescription')}
                   </Text>
                   <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>{t('caregivers.caregiverEmail')}</Text>
+                    <Text style={styles.inputLabel}>{t('caregivers.inviteEmailLabel')}</Text>
                     <TextInput
                       style={styles.input}
                       value={inviteEmail}
@@ -237,23 +237,23 @@ export default function CaregiversManager({
                   <View style={styles.infoBox}>
                     <Ionicons name="mail" size={20} color="#2196F3" />
                     <Text style={styles.infoText}>
-                      Recibirá un código de 6 dígitos para aceptar desde la app.
+                      {t('caregivers.inviteDescription')}
                     </Text>
                   </View>
                   <TouchableOpacity
                     style={styles.directModeLink}
                     onPress={() => setDirectMode(true)}
                   >
-                    <Text style={styles.directModeLinkText}>¿Ya tiene cuenta? Agrégalo directamente →</Text>
+                    <Text style={styles.directModeLinkText}>{t('caregivers.directMode')} →</Text>
                   </TouchableOpacity>
                 </>
               ) : (
                 <>
                   <Text style={styles.modalDescription}>
-                    {t('caregivers.inviteByEmail')}
+                    {t('caregivers.inviteEmailLabel')}
                   </Text>
                   <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>{t('caregivers.caregiverEmail')}</Text>
+                    <Text style={styles.inputLabel}>{t('caregivers.inviteEmailLabel')}</Text>
                     <TextInput
                       style={styles.input}
                       value={inviteEmail}
@@ -275,7 +275,7 @@ export default function CaregiversManager({
                     style={styles.directModeLink}
                     onPress={() => setDirectMode(false)}
                   >
-                    <Text style={styles.directModeLinkText}>← Volver a enviar invitación</Text>
+                    <Text style={styles.directModeLinkText}>{t('caregivers.inviteMode')}</Text>
                   </TouchableOpacity>
                 </>
               )}
@@ -299,7 +299,7 @@ export default function CaregiversManager({
                   <>
                     <Ionicons name={directMode ? 'person-add' : 'mail'} size={18} color="white" />
                     <Text style={styles.inviteButtonText}>
-                      {directMode ? t('common.add') : 'Enviar invitación'}
+                      {directMode ? t('common.add') : t('caregivers.inviteSend')}
                     </Text>
                   </>
                 )}
