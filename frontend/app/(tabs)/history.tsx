@@ -7,6 +7,7 @@ import {
   RefreshControl,
   TouchableOpacity,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,6 +15,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import api from '../../utils/api';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { useTranslation } from 'react-i18next';
 
 interface Patient {
   id: string;
@@ -23,19 +25,33 @@ interface Patient {
 interface Log {
   id: string;
   medication_id: string;
+  medication_name?: string;
   patient_id: string;
   scheduled_datetime: string;
   taken_datetime?: string;
   status: string;
   notes?: string;
+  is_synthetic?: boolean;
 }
 
+type StatusFilter = 'all' | 'taken' | 'skipped' | 'missed';
+
+const FILTER_BUTTONS: { key: StatusFilter; label: string; activeColor: string }[] = [
+  { key: 'all',     label: 'Todos',    activeColor: '#2196F3' },
+  { key: 'taken',   label: 'Tomados',  activeColor: '#4CAF50' },
+  { key: 'skipped', label: 'Saltados', activeColor: '#FF9800' },
+  { key: 'missed',  label: 'Perdidos', activeColor: '#f44336' },
+];
+
 export default function History() {
+  const { t } = useTranslation();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<string | null>(null);
   const [logs, setLogs] = useState<Log[]>([]);
   const [medications, setMedications] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
   useFocusEffect(
     useCallback(() => {
@@ -52,21 +68,26 @@ export default function History() {
         loadHistoryForPatient(response.data[0].id);
       }
     } catch (error) {
-      Alert.alert('Error', 'No se pudieron cargar los pacientes');
+      Alert.alert(t('common.error'), t('history.errorLoadPatients'));
     }
   };
 
   const loadHistoryForPatient = async (patientId: string) => {
+    setIsLoading(true);
     try {
+      const offset = new Date().getTimezoneOffset() * -1;
       const [logsResponse, medsResponse] = await Promise.all([
-        api.get(`/logs/patient/${patientId}`),
-        api.get(`/medications/patient/${patientId}`)
+        api.get(`/logs/patient/${patientId}`, {
+          params: { include_missed: true, timezone_offset: offset },
+        }),
+        api.get(`/medications/patient/${patientId}`),
       ]);
       setLogs(logsResponse.data);
       setMedications(medsResponse.data);
     } catch (error) {
-      Alert.alert('Error', 'No se pudo cargar el historial');
+      Alert.alert(t('common.error'), t('history.errorLoadHistory'));
     } finally {
+      setIsLoading(false);
       setRefreshing(false);
     }
   };
@@ -80,35 +101,36 @@ export default function History() {
     }
   };
 
-  const getMedicationName = (medicationId: string) => {
-    const med = medications.find(m => m.id === medicationId);
+  const getMedicationName = (log: Log): string => {
+    if (log.medication_name) return log.medication_name;
+    const med = medications.find(m => m.id === log.medication_id);
     return med ? med.name : 'Desconocido';
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'taken': return '#4CAF50';
-      case 'missed': return '#f44336';
+      case 'taken':   return '#4CAF50';
+      case 'missed':  return '#f44336';
       case 'skipped': return '#FF9800';
-      default: return '#999';
+      default:        return '#999';
     }
   };
 
   const getStatusText = (status: string) => {
     switch (status) {
-      case 'taken': return 'Tomado';
-      case 'missed': return 'Perdido';
-      case 'skipped': return 'Saltado';
-      default: return 'Pendiente';
+      case 'taken':   return t('history.taken');
+      case 'missed':  return t('history.missed');
+      case 'skipped': return t('history.skipped');
+      default:        return t('history.pending');
     }
   };
 
-  const getStatusIcon = (status: string) => {
+  const getStatusIcon = (status: string): any => {
     switch (status) {
-      case 'taken': return 'checkmark-circle';
-      case 'missed': return 'close-circle';
+      case 'taken':   return 'checkmark-circle';
+      case 'missed':  return 'close-circle';
       case 'skipped': return 'remove-circle';
-      default: return 'time';
+      default:        return 'time';
     }
   };
 
@@ -127,30 +149,37 @@ export default function History() {
   const getTimeDetail = (log: Log): string | null => {
     switch (log.status) {
       case 'taken':
-        if (log.taken_datetime) {
-          return `Tomado a las ${formatTime(log.taken_datetime)}`;
-        }
-        return 'Tomado (hora no registrada)';
+        if (log.taken_datetime) return `${t('history.takenAt')} ${formatTime(log.taken_datetime)}`;
+        return t('history.takenNoTime');
       case 'missed':
-        return 'No tomado';
+        return `${t('history.notTaken')} ${formatTime(log.scheduled_datetime)}`;
       case 'skipped':
-        return 'Saltado';
+        if (log.taken_datetime) return `${t('history.skippedAt')} ${formatTime(log.taken_datetime)}`;
+        return t('history.skipped');
       default:
         return null;
     }
   };
+
+  const filteredLogs = statusFilter === 'all'
+    ? logs
+    : logs.filter(log => log.status === statusFilter);
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       {patients.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Ionicons name="document-text-outline" size={64} color="#ccc" />
-          <Text style={styles.emptyText}>No hay historial disponible</Text>
-          <Text style={styles.emptySubtext}>Agrega pacientes y medicamentos primero</Text>
+          <Text style={styles.emptyText}>{t('history.noHistory')}</Text>
+          <Text style={styles.emptySubtext}>{t('history.addPatientsFirst')}</Text>
         </View>
       ) : (
         <>
-          <ScrollView horizontal style={styles.patientTabs} showsHorizontalScrollIndicator={false}>
+          <ScrollView
+            horizontal
+            style={styles.patientTabs}
+            showsHorizontalScrollIndicator={false}
+          >
             {patients.map((patient) => (
               <TouchableOpacity
                 key={patient.id}
@@ -160,6 +189,7 @@ export default function History() {
                 ]}
                 onPress={() => {
                   setSelectedPatient(patient.id);
+                  setStatusFilter('all');
                   loadHistoryForPatient(patient.id);
                 }}
               >
@@ -175,54 +205,82 @@ export default function History() {
             ))}
           </ScrollView>
 
-          <ScrollView
-            style={styles.content}
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-            }
-          >
-            {logs.length === 0 ? (
-              <View style={styles.emptyContainer}>
-                <Ionicons name="document-outline" size={64} color="#ccc" />
-                <Text style={styles.emptyText}>Sin historial para este paciente</Text>
-              </View>
-            ) : (
-              logs.map((log) => (
-                <View key={log.id} style={styles.logCard}>
-                  <View style={styles.logHeader}>
-                    <View style={[styles.statusIndicator, { backgroundColor: getStatusColor(log.status) }]}>
-                      <Ionicons name={getStatusIcon(log.status) as any} size={20} color="white" />
-                    </View>
-                    <View style={styles.logInfo}>
-                      <Text style={styles.medicationName}>{getMedicationName(log.medication_id)}</Text>
-                      <Text style={styles.logDate}>
-                        {format(new Date(log.scheduled_datetime), "d 'de' MMMM, yyyy", { locale: es })}
-                      </Text>
-                      <Text style={styles.scheduledTime}>
-                        Programado: {formatTime(log.scheduled_datetime)}
-                      </Text>
-                      {getTimeDetail(log) !== null && (
-                        <Text style={[
-                          styles.timeDetail,
-                          log.status === 'taken' && styles.timeDetailTaken,
-                          log.status === 'missed' && styles.timeDetailMissed,
-                          log.status === 'skipped' && styles.timeDetailSkipped,
-                        ]}>
-                          {getTimeDetail(log)}
-                        </Text>
-                      )}
-                    </View>
-                    <View style={[styles.statusBadge, { backgroundColor: getStatusColor(log.status) }]}>
-                      <Text style={styles.statusBadgeText}>{getStatusText(log.status)}</Text>
-                    </View>
-                  </View>
-                  {log.notes && (
-                    <Text style={styles.logNotes}>Nota: {log.notes}</Text>
-                  )}
+          <View style={styles.filterRow}>
+            {FILTER_BUTTONS.map(btn => {
+              const isActive = statusFilter === btn.key;
+              return (
+                <TouchableOpacity
+                  key={btn.key}
+                  style={[
+                    styles.filterButton,
+                    isActive
+                      ? { backgroundColor: btn.activeColor, borderColor: btn.activeColor }
+                      : styles.filterButtonInactive,
+                  ]}
+                  onPress={() => setStatusFilter(btn.key)}
+                >
+                  <Text style={[styles.filterButtonText, isActive && styles.filterButtonTextActive]}>
+                    {btn.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {isLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#2196F3" />
+            </View>
+          ) : (
+            <ScrollView
+              style={styles.content}
+              refreshControl={
+                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+              }
+            >
+              {filteredLogs.length === 0 ? (
+                <View style={styles.emptyContainer}>
+                  <Ionicons name="document-outline" size={64} color="#ccc" />
+                  <Text style={styles.emptyText}>{t('history.noHistoryForPatient')}</Text>
                 </View>
-              ))
-            )}
-          </ScrollView>
+              ) : (
+                filteredLogs.map((log) => (
+                  <View key={log.id} style={styles.logCard}>
+                    <View style={styles.logHeader}>
+                      <View style={[styles.statusIndicator, { backgroundColor: getStatusColor(log.status) }]}>
+                        <Ionicons name={getStatusIcon(log.status)} size={20} color="white" />
+                      </View>
+                      <View style={styles.logInfo}>
+                        <Text style={styles.medicationName}>{getMedicationName(log)}</Text>
+                        <Text style={styles.logDate}>
+                          {format(new Date(log.scheduled_datetime), "d 'de' MMMM, yyyy", { locale: es })}
+                        </Text>
+                        <Text style={styles.scheduledTime}>
+                          {t('history.scheduled')}: {formatTime(log.scheduled_datetime)}
+                        </Text>
+                        {getTimeDetail(log) !== null && (
+                          <Text style={[
+                            styles.timeDetail,
+                            log.status === 'taken'   && styles.timeDetailTaken,
+                            log.status === 'missed'  && styles.timeDetailMissed,
+                            log.status === 'skipped' && styles.timeDetailSkipped,
+                          ]}>
+                            {getTimeDetail(log)}
+                          </Text>
+                        )}
+                      </View>
+                      <View style={[styles.statusBadge, { backgroundColor: getStatusColor(log.status) }]}>
+                        <Text style={styles.statusBadgeText}>{getStatusText(log.status)}</Text>
+                      </View>
+                    </View>
+                    {log.notes && (
+                      <Text style={styles.logNotes}>{t('history.note')}: {log.notes}</Text>
+                    )}
+                  </View>
+                ))
+              )}
+            </ScrollView>
+          )}
         </>
       )}
     </SafeAreaView>
@@ -258,6 +316,38 @@ const styles = StyleSheet.create({
   },
   patientTabTextActive: {
     color: 'white',
+  },
+  filterRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: 'white',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+    gap: 8,
+  },
+  filterButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  filterButtonInactive: {
+    backgroundColor: 'white',
+    borderColor: '#e0e0e0',
+  },
+  filterButtonText: {
+    fontSize: 13,
+    color: '#666',
+    fontWeight: '500',
+  },
+  filterButtonTextActive: {
+    color: 'white',
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   content: {
     flex: 1,

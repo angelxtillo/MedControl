@@ -205,6 +205,25 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
+# ============= SCHEDULING HELPERS =============
+WEEKDAY_MAP = {
+    "lunes": 0, "martes": 1, "miércoles": 2, "miercoles": 2,
+    "jueves": 3, "viernes": 4, "sábado": 5, "sabado": 5,
+    "domingo": 6
+}
+
+def should_show_today(med: dict, weekday: int) -> bool:
+    frequency = med.get("frequency", "").lower()
+    day_names = ["lunes", "martes", "miércoles", "miercoles",
+                 "jueves", "viernes", "sábado", "sabado", "domingo"]
+    has_day_name = any(day in frequency for day in day_names)
+    if not has_day_name:
+        return True
+    for day_name, day_num in WEEKDAY_MAP.items():
+        if day_name in frequency and day_num == weekday:
+            return True
+    return False
+
 # ============= AUTH ENDPOINTS =============
 @api_router.post("/auth/register")
 async def register(caregiver: CaregiverCreate):
@@ -623,29 +642,134 @@ async def delete_medication(medication_id: str, user_id: str = Depends(get_curre
 
 # ============= MEDICATION LOG ENDPOINTS =============
 @api_router.get("/logs/patient/{patient_id}")
-async def get_logs(patient_id: str, user_id: str = Depends(get_current_user)):
+async def get_logs(
+    patient_id: str,
+    include_missed: bool = False,
+    timezone_offset: int = 0,
+    user_id: str = Depends(get_current_user)
+):
     # Verify access
     patient = await db.patients.find_one({
         "_id": ObjectId(patient_id),
         "caregiver_ids": user_id
-    }, {"_id": 1})  # Only check existence
+    }, {"_id": 1})
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
-    
-    logs = await db.medication_logs.find({"patient_id": patient_id}).sort("scheduled_datetime", -1).to_list(200)
-    return [
+
+    if not include_missed:
+        logs = await db.medication_logs.find(
+            {"patient_id": patient_id}
+        ).sort("scheduled_datetime", -1).to_list(200)
+        return [
+            {
+                "id": str(log["_id"]),
+                "medication_id": log["medication_id"],
+                "patient_id": log["patient_id"],
+                "scheduled_datetime": log["scheduled_datetime"],
+                "taken_datetime": log.get("taken_datetime"),
+                "status": log["status"],
+                "notes": log.get("notes"),
+                "created_at": log["created_at"].isoformat()
+            }
+            for log in logs
+        ]
+
+    # --- include_missed=True: enrich with synthetic missed logs ---
+    now_local = datetime.utcnow() + timedelta(minutes=timezone_offset)
+    thirty_days_ago = (now_local - timedelta(days=30)).date().isoformat()
+
+    real_logs = await db.medication_logs.find({
+        "patient_id": patient_id,
+        "scheduled_datetime": {"$gte": thirty_days_ago}
+    }).sort("scheduled_datetime", -1).to_list(1000)
+
+    medications = await db.medications.find(
+        {"patient_id": patient_id, "active": True}
+    ).to_list(100)
+
+    med_name_by_id = {str(m["_id"]): m["name"] for m in medications}
+
+    # Build lookup set for efficiency — avoids O(n) scan per dose
+    existing_keys = {
+        (log["medication_id"], log["scheduled_datetime"])
+        for log in real_logs
+    }
+
+    real_logs_out = [
         {
             "id": str(log["_id"]),
             "medication_id": log["medication_id"],
+            "medication_name": med_name_by_id.get(log["medication_id"], "Desconocido"),
             "patient_id": log["patient_id"],
             "scheduled_datetime": log["scheduled_datetime"],
             "taken_datetime": log.get("taken_datetime"),
             "status": log["status"],
             "notes": log.get("notes"),
+            "is_synthetic": False,
             "created_at": log["created_at"].isoformat()
         }
-        for log in logs
+        for log in real_logs
     ]
+
+    synthetic_missed = []
+
+    for med in medications:
+        med_id = str(med["_id"])
+        # Only generate missed from the medication's own start_date
+        med_start = datetime.fromisoformat(
+            med.get("start_date", (now_local - timedelta(days=30)).date().isoformat())
+        )
+        end_date_str = med.get("end_date")
+
+        for days_back in range(30):
+            check_dt = now_local - timedelta(days=days_back)
+            check_date = check_dt.date()
+            check_date_str = check_date.isoformat()
+
+            if check_date < med_start.date():
+                continue
+            if end_date_str and check_date_str > end_date_str:
+                continue
+            if not should_show_today(med, check_dt.weekday()):
+                continue
+
+            for time_slot in med.get("schedule_times", []):
+                try:
+                    parts = time_slot.split(":")
+                    normalized_time = (
+                        f"{parts[0].zfill(2)}:{parts[1].zfill(2)}"
+                        if len(parts) == 2 else time_slot
+                    )
+                except Exception:
+                    normalized_time = time_slot
+
+                scheduled_dt = f"{check_date_str}T{normalized_time}:00"
+
+                try:
+                    if datetime.fromisoformat(scheduled_dt) >= now_local:
+                        continue
+                except (ValueError, TypeError):
+                    continue
+
+                if (med_id, scheduled_dt) in existing_keys:
+                    continue
+
+                synthetic_missed.append({
+                    "id": f"synthetic_{med_id}_{scheduled_dt}",
+                    "medication_id": med_id,
+                    "medication_name": med["name"],
+                    "patient_id": patient_id,
+                    "scheduled_datetime": scheduled_dt,
+                    "taken_datetime": None,
+                    "status": "missed",
+                    "notes": None,
+                    "is_synthetic": True,
+                    "created_at": scheduled_dt
+                })
+
+    all_logs = real_logs_out + synthetic_missed
+    all_logs.sort(key=lambda x: x["scheduled_datetime"], reverse=True)
+    return all_logs
 
 @api_router.post("/logs")
 async def create_log(log: MedicationLogCreate, user_id: str = Depends(get_current_user)):
@@ -714,24 +838,6 @@ async def get_today_dashboard(user_id: str = Depends(get_current_user), timezone
     now_local = datetime.utcnow() + timedelta(minutes=timezone_offset)
     today_str = now_local.date().isoformat()
     weekday_local = now_local.weekday()  # 0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri, 5=Sat, 6=Sun
-
-    WEEKDAY_MAP = {
-        "lunes": 0, "martes": 1, "miércoles": 2, "miercoles": 2,
-        "jueves": 3, "viernes": 4, "sábado": 5, "sabado": 5,
-        "domingo": 6
-    }
-
-    def should_show_today(med: dict, weekday_local: int) -> bool:
-        frequency = med.get("frequency", "").lower()
-        day_names = ["lunes", "martes", "miércoles", "miercoles",
-                     "jueves", "viernes", "sábado", "sabado", "domingo"]
-        has_day_name = any(day in frequency for day in day_names)
-        if not has_day_name:
-            return True
-        for day_name, day_num in WEEKDAY_MAP.items():
-            if day_name in frequency and day_num == weekday_local:
-                return True
-        return False
 
     # Get all patients for this caregiver (without photos for performance)
     patients = await db.patients.find(
@@ -855,24 +961,6 @@ async def get_upcoming_dashboard(
         5: "mayo", 6: "junio", 7: "julio", 8: "agosto",
         9: "septiembre", 10: "octubre", 11: "noviembre", 12: "diciembre"
     }
-    WEEKDAY_MAP = {
-        "lunes": 0, "martes": 1, "miércoles": 2, "miercoles": 2,
-        "jueves": 3, "viernes": 4, "sábado": 5, "sabado": 5,
-        "domingo": 6
-    }
-
-    def should_show_on_day(med: dict, weekday: int) -> bool:
-        frequency = med.get("frequency", "").lower()
-        day_names = ["lunes", "martes", "miércoles", "miercoles",
-                     "jueves", "viernes", "sábado", "sabado", "domingo"]
-        has_day_name = any(day in frequency for day in day_names)
-        if not has_day_name:
-            return True
-        for day_name, day_num in WEEKDAY_MAP.items():
-            if day_name in frequency and day_num == weekday:
-                return True
-        return False
-
     # Next 7 days starting from tomorrow
     upcoming_dates = [
         (now_local + timedelta(days=i)).date().isoformat()
@@ -909,7 +997,7 @@ async def get_upcoming_dashboard(
             end_date = med.get("end_date")
             if end_date and end_date < future_date_str:
                 continue
-            if not should_show_on_day(med, future_weekday):
+            if not should_show_today(med, future_weekday):
                 continue
 
             for time_slot in med["schedule_times"]:
