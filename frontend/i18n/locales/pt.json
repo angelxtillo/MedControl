@@ -124,7 +124,8 @@
     "addPhoto": "Adicionar Foto",
     "additionalNotes": "Notas adicionais",
     "saving": "Salvando...",
-    "validAge": "Insira uma idade válida"
+    "validAge": "Insira uma idade válida",
+    "patientDetail": "Detalhe do Paciente"
   },
   "caregivers": {
     "title": "Cuidadores",
@@ -139,7 +140,9 @@
     "alreadyAdded": "Este cuidador já tem acesso ao paciente",
     "cannotRemoveOwner": "Você não pode remover o criador do paciente",
     "accessInfo": "O novo cuidador poderá ver e gerenciar os medicamentos de {{patient}}.",
-    "creator": "Criador"
+    "creator": "Criador",
+    "noCaregivers": "Sem cuidadores atribuídos",
+    "emailRequired": "Insira o e-mail do cuidador"
   },
   "medications": {
     "title": "Medicamentos",
@@ -218,7 +221,20 @@
     "successUpdated": "Medicamento atualizado com sucesso",
     "noSpecified": "Não especificado",
     "deleteWarning": "Todo o histórico associado será perdido",
-    "successDeleted": "Medicamento excluído"
+    "successDeleted": "Medicamento excluído",
+    "newMedication": "Novo Medicamento",
+    "presTablets": "Comprimidos",
+    "presSyrup": "Xarope",
+    "presDrops": "Gotas",
+    "presInjection": "Injeção",
+    "presCream": "Creme",
+    "presOther": "Outro",
+    "dose1tablet": "1 comprimido",
+    "dose2tablets": "2 comprimidos",
+    "dose5ml": "5 ml",
+    "dose10ml": "10 ml",
+    "dose10drops": "10 gotas",
+    "dose15drops": "15 gotas"
   },
   "history": {
     "title": "Histórico",

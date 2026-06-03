@@ -124,7 +124,8 @@
     "addPhoto": "Add Photo",
     "additionalNotes": "Additional notes",
     "saving": "Saving...",
-    "validAge": "Enter a valid age"
+    "validAge": "Enter a valid age",
+    "patientDetail": "Patient Detail"
   },
   "caregivers": {
     "title": "Caregivers",
@@ -139,7 +140,9 @@
     "alreadyAdded": "This caregiver already has access to the patient",
     "cannotRemoveOwner": "You cannot remove the patient's creator",
     "accessInfo": "The new caregiver will be able to view and manage {{patient}}'s medications.",
-    "creator": "Creator"
+    "creator": "Creator",
+    "noCaregivers": "No caregivers assigned",
+    "emailRequired": "Enter the caregiver's email"
   },
   "medications": {
     "title": "Medications",
@@ -218,7 +221,20 @@
     "successUpdated": "Medication updated successfully",
     "noSpecified": "Not specified",
     "deleteWarning": "All associated history will be lost",
-    "successDeleted": "Medication deleted"
+    "successDeleted": "Medication deleted",
+    "newMedication": "New Medication",
+    "presTablets": "Tablets",
+    "presSyrup": "Syrup",
+    "presDrops": "Drops",
+    "presInjection": "Injection",
+    "presCream": "Cream",
+    "presOther": "Other",
+    "dose1tablet": "1 tablet",
+    "dose2tablets": "2 tablets",
+    "dose5ml": "5 ml",
+    "dose10ml": "10 ml",
+    "dose10drops": "10 drops",
+    "dose15drops": "15 drops"
   },
   "history": {
     "title": "History",

@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../utils/api';
+import { useTranslation } from 'react-i18next';
 
 interface Caregiver {
   id: string;
@@ -26,11 +27,12 @@ interface CaregiversManagerProps {
   onCaregiversChange?: () => void;
 }
 
-export default function CaregiversManager({ 
-  patientId, 
+export default function CaregiversManager({
+  patientId,
   patientName,
-  onCaregiversChange 
+  onCaregiversChange
 }: CaregiversManagerProps) {
+  const { t } = useTranslation();
   const [caregivers, setCaregivers] = useState<Caregiver[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
@@ -54,7 +56,7 @@ export default function CaregiversManager({
 
   const handleInvite = async () => {
     if (!inviteEmail.trim()) {
-      Alert.alert('Error', 'Ingresa el email del cuidador');
+      Alert.alert(t('common.error'), t('caregivers.emailRequired'));
       return;
     }
 
@@ -64,15 +66,15 @@ export default function CaregiversManager({
         patient_id: patientId,
         email: inviteEmail.trim().toLowerCase(),
       });
-      
-      Alert.alert('¡Éxito!', 'Cuidador agregado correctamente');
+
+      Alert.alert(t('common.success'), t('caregivers.caregiverAdded'));
       setInviteEmail('');
       setModalVisible(false);
       loadCaregivers();
       onCaregiversChange?.();
     } catch (error: any) {
-      const message = error.response?.data?.detail || 'No se pudo agregar el cuidador';
-      Alert.alert('Error', message);
+      const message = error.response?.data?.detail || t('caregivers.notFound');
+      Alert.alert(t('common.error'), message);
     } finally {
       setInviting(false);
     }
@@ -80,27 +82,27 @@ export default function CaregiversManager({
 
   const handleRemove = (caregiver: Caregiver) => {
     if (caregiver.is_owner) {
-      Alert.alert('No permitido', 'No puedes eliminar al creador del paciente');
+      Alert.alert(t('common.error'), t('caregivers.cannotRemoveOwner'));
       return;
     }
 
     Alert.alert(
-      'Confirmar',
-      `¿Quitar a ${caregiver.name} como cuidador de ${patientName}?`,
+      t('common.confirm'),
+      t('caregivers.removeConfirm', { name: caregiver.name, patient: patientName }),
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Quitar',
+          text: t('caregivers.removeCaregiver'),
           style: 'destructive',
           onPress: async () => {
             try {
               await api.delete(`/patients/${patientId}/caregivers/${caregiver.id}`);
-              Alert.alert('Éxito', 'Cuidador removido');
+              Alert.alert(t('common.success'), t('caregivers.caregiverRemoved'));
               loadCaregivers();
               onCaregiversChange?.();
             } catch (error: any) {
-              const message = error.response?.data?.detail || 'No se pudo remover el cuidador';
-              Alert.alert('Error', message);
+              const message = error.response?.data?.detail || t('common.errorDelete');
+              Alert.alert(t('common.error'), message);
             }
           },
         },
@@ -119,7 +121,7 @@ export default function CaregiversManager({
       </View>
       <View style={styles.caregiverInfo}>
         <Text style={styles.caregiverName}>
-          {item.name} {item.is_owner && '(Creador)'}
+          {item.name} {item.is_owner && `(${t('caregivers.creator')})`}
         </Text>
         <Text style={styles.caregiverEmail}>{item.email}</Text>
       </View>
@@ -147,14 +149,14 @@ export default function CaregiversManager({
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Ionicons name="people" size={20} color="#2196F3" />
-          <Text style={styles.headerTitle}>Cuidadores ({caregivers.length})</Text>
+          <Text style={styles.headerTitle}>{t('caregivers.title')} ({caregivers.length})</Text>
         </View>
         <TouchableOpacity
           style={styles.addButton}
           onPress={() => setModalVisible(true)}
         >
           <Ionicons name="person-add" size={18} color="white" />
-          <Text style={styles.addButtonText}>Agregar</Text>
+          <Text style={styles.addButtonText}>{t('common.add')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -164,7 +166,7 @@ export default function CaregiversManager({
         keyExtractor={(item) => item.id}
         scrollEnabled={false}
         ListEmptyComponent={
-          <Text style={styles.emptyText}>No hay cuidadores asignados</Text>
+          <Text style={styles.emptyText}>{t('caregivers.noCaregivers')}</Text>
         }
       />
 
@@ -178,7 +180,7 @@ export default function CaregiversManager({
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Agregar Cuidador</Text>
+              <Text style={styles.modalTitle}>{t('caregivers.addCaregiver')}</Text>
               <TouchableOpacity
                 onPress={() => setModalVisible(false)}
                 style={styles.closeButton}
@@ -189,12 +191,11 @@ export default function CaregiversManager({
 
             <View style={styles.modalBody}>
               <Text style={styles.modalDescription}>
-                Ingresa el email de la persona que quieres agregar como cuidador. 
-                Debe tener una cuenta registrada en MedControl.
+                {t('caregivers.inviteByEmail')}
               </Text>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Email del cuidador</Text>
+                <Text style={styles.inputLabel}>{t('caregivers.caregiverEmail')}</Text>
                 <TextInput
                   style={styles.input}
                   value={inviteEmail}
@@ -210,7 +211,7 @@ export default function CaregiversManager({
               <View style={styles.infoBox}>
                 <Ionicons name="information-circle" size={20} color="#2196F3" />
                 <Text style={styles.infoText}>
-                  El nuevo cuidador podrá ver y gestionar los medicamentos de {patientName}.
+                  {t('caregivers.accessInfo', { patient: patientName })}
                 </Text>
               </View>
             </View>
@@ -220,7 +221,7 @@ export default function CaregiversManager({
                 style={styles.cancelButton}
                 onPress={() => setModalVisible(false)}
               >
-                <Text style={styles.cancelButtonText}>Cancelar</Text>
+                <Text style={styles.cancelButtonText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.inviteButton, inviting && styles.inviteButtonDisabled]}
@@ -232,7 +233,7 @@ export default function CaregiversManager({
                 ) : (
                   <>
                     <Ionicons name="person-add" size={18} color="white" />
-                    <Text style={styles.inviteButtonText}>Agregar</Text>
+                    <Text style={styles.inviteButtonText}>{t('common.add')}</Text>
                   </>
                 )}
               </TouchableOpacity>

@@ -18,6 +18,19 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import api from '../../utils/api';
 import { useTranslation } from 'react-i18next';
 
+// Day abbreviations by language — only for display; Spanish keys are stored in MongoDB
+const getDayNames = (lang: string): string[] => {
+  const days: Record<string, string[]> = {
+    es: ['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sa', 'Do'],
+    en: ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'],
+    pt: ['Se', 'Te', 'Qu', 'Qu', 'Se', 'Sá', 'Do'],
+    fr: ['Lu', 'Ma', 'Me', 'Je', 'Ve', 'Sa', 'Di'],
+  };
+  return days[lang] || days['es'];
+};
+
+const SPANISH_DAYS = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sa', 'Do'];
+
 // Labels must remain in Spanish — stored as-is in MongoDB and matched on load
 const FREQUENCY_OPTIONS = [
   { label: 'Cada 4 horas', value: 'every_4h', hours: 4 },
@@ -36,7 +49,7 @@ const DAY_NAMES: Record<string, string> = {
 
 export default function EditMedication() {
   const { id } = useLocalSearchParams();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState('');
@@ -304,7 +317,7 @@ export default function EditMedication() {
 
                 {customType === 'days' && (
                   <View style={styles.daysRow}>
-                    {['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sa', 'Do'].map(day => (
+                    {SPANISH_DAYS.map((day, index) => (
                       <TouchableOpacity
                         key={day}
                         style={[styles.dayBtn, selectedDays.includes(day) && styles.dayBtnSelected]}
@@ -313,7 +326,7 @@ export default function EditMedication() {
                         )}
                       >
                         <Text style={[styles.dayBtnText, selectedDays.includes(day) && styles.dayBtnTextSelected]}>
-                          {day}
+                          {getDayNames(i18n.language)[index]}
                         </Text>
                       </TouchableOpacity>
                     ))}

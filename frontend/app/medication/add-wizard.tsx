@@ -29,27 +29,32 @@ const FREQUENCY_OPTIONS = [
   { label: 'Personalizado', value: 'custom', hours: 0 },
 ];
 
+// Labels stay as i18n keys — values are stored in MongoDB as-is
 const PRESENTATION_OPTIONS = [
-  { labelKey: 'medications.tablets', value: 'tabletas', icon: 'ellipse' },
-  { labelKey: 'medications.syrup', value: 'jarabe', icon: 'water' },
-  { labelKey: 'medications.drops', value: 'gotas', icon: 'water-outline' },
-  { labelKey: 'medications.injection', value: 'inyeccion', icon: 'medical' },
-  { labelKey: 'medications.cream', value: 'crema', icon: 'color-fill' },
-  { labelKey: 'medications.other', value: 'otro', icon: 'medical-outline' },
+  { labelKey: 'medications.presTablets', value: 'tabletas', icon: 'ellipse' },
+  { labelKey: 'medications.presSyrup', value: 'jarabe', icon: 'water' },
+  { labelKey: 'medications.presDrops', value: 'gotas', icon: 'water-outline' },
+  { labelKey: 'medications.presInjection', value: 'inyeccion', icon: 'medical' },
+  { labelKey: 'medications.presCream', value: 'crema', icon: 'color-fill' },
+  { labelKey: 'medications.presOther', value: 'otro', icon: 'medical-outline' },
 ];
 
-const DOSE_SUGGESTIONS = [
-  '1 tableta',
-  '2 tabletas',
-  '5 ml',
-  '10 ml',
-  '10 gotas',
-  '15 gotas',
-];
+// Day abbreviations by language — only for display; Spanish keys are stored in MongoDB
+const getDayNames = (lang: string): string[] => {
+  const days: Record<string, string[]> = {
+    es: ['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sa', 'Do'],
+    en: ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'],
+    pt: ['Se', 'Te', 'Qu', 'Qu', 'Se', 'Sá', 'Do'],
+    fr: ['Lu', 'Ma', 'Me', 'Je', 'Ve', 'Sa', 'Di'],
+  };
+  return days[lang] || days['es'];
+};
+
+const SPANISH_DAYS = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sa', 'Do'];
 
 export default function AddMedicationWizard() {
   const { patientId } = useLocalSearchParams();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [currentStep, setCurrentStep] = useState(1);
   const [saving, setSaving] = useState(false);
 
@@ -346,7 +351,7 @@ export default function AddMedicationWizard() {
           {customType === 'days' && (
             <View style={styles.customSubSection}>
               <View style={styles.daysRow}>
-                {['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sa', 'Do'].map(day => (
+                {SPANISH_DAYS.map((day, index) => (
                   <TouchableOpacity
                     key={day}
                     style={[styles.dayButton, selectedDays.includes(day) && styles.dayButtonSelected]}
@@ -355,7 +360,7 @@ export default function AddMedicationWizard() {
                     )}
                   >
                     <Text style={[styles.dayButtonText, selectedDays.includes(day) && styles.dayButtonTextSelected]}>
-                      {day}
+                      {getDayNames(i18n.language)[index]}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -462,7 +467,14 @@ export default function AddMedicationWizard() {
       <View style={styles.suggestionsContainer}>
         <Text style={styles.suggestionsTitle}>{t('medications.quickSuggestions')}</Text>
         <View style={styles.suggestionsGrid}>
-          {DOSE_SUGGESTIONS.map((suggestion) => (
+          {([
+            t('medications.dose1tablet'),
+            t('medications.dose2tablets'),
+            t('medications.dose5ml'),
+            t('medications.dose10ml'),
+            t('medications.dose10drops'),
+            t('medications.dose15drops'),
+          ]).map((suggestion) => (
             <TouchableOpacity
               key={suggestion}
               style={[
@@ -499,11 +511,12 @@ export default function AddMedicationWizard() {
         >
           <Ionicons name="calendar-outline" size={20} color="#2196F3" />
           <Text style={styles.dateButtonText}>
-            {startDate.toLocaleDateString('es-ES', {
-              weekday: 'long',
-              day: 'numeric',
-              month: 'long'
-            })}
+            {startDate.toLocaleDateString(
+              i18n.language === 'es' ? 'es-CO' :
+              i18n.language === 'pt' ? 'pt-BR' :
+              i18n.language === 'fr' ? 'fr-FR' : 'en-US',
+              { weekday: 'long', day: 'numeric', month: 'long' }
+            )}
           </Text>
         </TouchableOpacity>
       </View>
@@ -563,11 +576,12 @@ export default function AddMedicationWizard() {
             <Ionicons name="calendar-outline" size={20} color="#2196F3" />
             <Text style={styles.dateButtonText}>
               {endDate
-                ? endDate.toLocaleDateString('es-ES', {
-                    weekday: 'long',
-                    day: 'numeric',
-                    month: 'long'
-                  })
+                ? endDate.toLocaleDateString(
+                    i18n.language === 'es' ? 'es-CO' :
+                    i18n.language === 'pt' ? 'pt-BR' :
+                    i18n.language === 'fr' ? 'fr-FR' : 'en-US',
+                    { weekday: 'long', day: 'numeric', month: 'long' }
+                  )
                 : t('medications.selectDate')
               }
             </Text>

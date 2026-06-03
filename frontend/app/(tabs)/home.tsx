@@ -41,7 +41,7 @@ interface UpcomingDay {
 }
 
 export default function Home() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const [dashboard, setDashboard] = useState<DashboardData>({
     medications_today: [],
@@ -190,7 +190,12 @@ export default function Home() {
       <View style={styles.header}>
         <View>
           <Text style={styles.greeting}>{t('home.greeting', { name: user?.name })}</Text>
-          <Text style={styles.date}>{new Date().toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</Text>
+          <Text style={styles.date}>{new Date().toLocaleDateString(
+            i18n.language === 'es' ? 'es-CO' :
+            i18n.language === 'pt' ? 'pt-BR' :
+            i18n.language === 'fr' ? 'fr-FR' : 'en-US',
+            { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }
+          )}</Text>
         </View>
       </View>
 
