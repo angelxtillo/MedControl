@@ -15,10 +15,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import api from '../../utils/api';
+import { useTranslation } from 'react-i18next';
 
 const TOTAL_STEPS = 5;
 
-// Opciones de frecuencia predefinidas
+// Labels must remain in Spanish — stored as-is in MongoDB and matched on load
 const FREQUENCY_OPTIONS = [
   { label: 'Cada 4 horas', value: 'every_4h', hours: 4 },
   { label: 'Cada 6 horas', value: 'every_6h', hours: 6 },
@@ -28,17 +29,15 @@ const FREQUENCY_OPTIONS = [
   { label: 'Personalizado', value: 'custom', hours: 0 },
 ];
 
-// Opciones de presentación
 const PRESENTATION_OPTIONS = [
-  { label: 'Tabletas', value: 'tabletas', icon: 'ellipse' },
-  { label: 'Jarabe', value: 'jarabe', icon: 'water' },
-  { label: 'Gotas', value: 'gotas', icon: 'water-outline' },
-  { label: 'Inyección', value: 'inyeccion', icon: 'medical' },
-  { label: 'Crema', value: 'crema', icon: 'color-fill' },
-  { label: 'Otro', value: 'otro', icon: 'medical-outline' },
+  { labelKey: 'medications.tablets', value: 'tabletas', icon: 'ellipse' },
+  { labelKey: 'medications.syrup', value: 'jarabe', icon: 'water' },
+  { labelKey: 'medications.drops', value: 'gotas', icon: 'water-outline' },
+  { labelKey: 'medications.injection', value: 'inyeccion', icon: 'medical' },
+  { labelKey: 'medications.cream', value: 'crema', icon: 'color-fill' },
+  { labelKey: 'medications.other', value: 'otro', icon: 'medical-outline' },
 ];
 
-// Sugerencias de dosis rápidas
 const DOSE_SUGGESTIONS = [
   '1 tableta',
   '2 tabletas',
@@ -50,33 +49,30 @@ const DOSE_SUGGESTIONS = [
 
 export default function AddMedicationWizard() {
   const { patientId } = useLocalSearchParams();
+  const { t } = useTranslation();
   const [currentStep, setCurrentStep] = useState(1);
   const [saving, setSaving] = useState(false);
 
-  // Paso 1: Medicamento
   const [medicationName, setMedicationName] = useState('');
   const [presentation, setPresentation] = useState('');
 
-  // Paso 2: Frecuencia
   const [frequency, setFrequency] = useState('');
-  const [customFrequency, setCustomFrequency] = useState('');
+  const [customType, setCustomType] = useState<'hours' | 'days' | null>(null);
+  const [customHours, setCustomHours] = useState(3);
+  const [selectedDays, setSelectedDays] = useState<string[]>([]);
 
-  // Paso 3: Horarios
   const [scheduleTimes, setScheduleTimes] = useState<string[]>([]);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [tempTime, setTempTime] = useState(new Date());
 
-  // Paso 4: Dosis
   const [dosage, setDosage] = useState('');
 
-  // Paso 5: Duración
   const [startDate, setStartDate] = useState(new Date());
   const [endDateOption, setEndDateOption] = useState<'indefinite' | 'specific'>('indefinite');
   const [endDate, setEndDate] = useState<Date | null>(null);
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
 
-  // Notificaciones habilitadas por defecto
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
   const canGoNext = () => {
@@ -84,7 +80,11 @@ export default function AddMedicationWizard() {
       case 1:
         return medicationName.trim().length > 0;
       case 2:
-        return frequency !== '' && (frequency !== 'custom' || customFrequency.trim().length > 0);
+        if (frequency === '') return false;
+        if (frequency !== 'custom') return true;
+        if (customType === 'hours') return true;
+        if (customType === 'days') return selectedDays.length > 0;
+        return false;
       case 3:
         return scheduleTimes.length > 0;
       case 4:
@@ -118,7 +118,6 @@ export default function AddMedicationWizard() {
       const hours = selectedDate.getHours().toString().padStart(2, '0');
       const minutes = selectedDate.getMinutes().toString().padStart(2, '0');
       const timeString = `${hours}:${minutes}`;
-      
       if (!scheduleTimes.includes(timeString)) {
         setScheduleTimes([...scheduleTimes, timeString].sort());
       }
@@ -129,18 +128,35 @@ export default function AddMedicationWizard() {
     setScheduleTimes(scheduleTimes.filter(t => t !== time));
   };
 
+  // Returns Spanish string — stored as-is in MongoDB and matched on load
   const getFrequencyLabel = () => {
-    if (frequency === 'custom') return customFrequency;
+    if (frequency === 'custom') {
+      if (customType === 'hours') return `Cada ${customHours} horas`;
+      if (customType === 'days') {
+        const dayNames: Record<string, string> = {
+          Lu: 'Lunes', Ma: 'Martes', Mi: 'Miércoles',
+          Ju: 'Jueves', Vi: 'Viernes', Sa: 'Sábado', Do: 'Domingo',
+        };
+        return selectedDays.map(d => dayNames[d]).join(', ') || 'Personalizado';
+      }
+      return 'Personalizado';
+    }
     const option = FREQUENCY_OPTIONS.find(f => f.value === frequency);
     return option?.label || '';
   };
 
   const expandScheduleTimes = (baseTime: string, frequencyValue: string): string[] => {
-    const freqOption = FREQUENCY_OPTIONS.find(f => f.value === frequencyValue);
-    if (!freqOption || freqOption.hours === 0 || freqOption.hours >= 24) return scheduleTimes;
+    let intervalHours: number;
+    if (frequencyValue === 'custom' && customType === 'hours') {
+      intervalHours = customHours;
+    } else {
+      const freqOption = FREQUENCY_OPTIONS.find(f => f.value === frequencyValue);
+      if (!freqOption || freqOption.hours === 0 || freqOption.hours >= 24) return scheduleTimes;
+      intervalHours = freqOption.hours;
+    }
     const parts = baseTime.split(':');
     const baseMinutes = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
-    const intervalMinutes = freqOption.hours * 60;
+    const intervalMinutes = intervalHours * 60;
     const times: string[] = [];
     let current = baseMinutes;
     while (current < 1440) {
@@ -154,8 +170,11 @@ export default function AddMedicationWizard() {
     setSaving(true);
     try {
       const freqOption = FREQUENCY_OPTIONS.find(f => f.value === frequency);
+      const shouldExpand =
+        (freqOption && freqOption.hours > 0 && freqOption.hours < 24) ||
+        (frequency === 'custom' && customType === 'hours');
       const finalTimes =
-        freqOption && freqOption.hours > 0 && freqOption.hours < 24 && scheduleTimes.length > 0
+        shouldExpand && scheduleTimes.length > 0
           ? expandScheduleTimes(scheduleTimes[0], frequency)
           : scheduleTimes;
 
@@ -165,9 +184,9 @@ export default function AddMedicationWizard() {
         dosage: dosage.trim() || 'Sin especificar',
         frequency: getFrequencyLabel(),
         schedule_times: finalTimes,
-        start_date: startDate.toISOString().split('T')[0],
-        end_date: endDateOption === 'specific' && endDate 
-          ? endDate.toISOString().split('T')[0] 
+        start_date: `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-${String(startDate.getDate()).padStart(2, '0')}`,
+        end_date: endDateOption === 'specific' && endDate
+          ? `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`
           : null,
         instructions: presentation ? `Presentación: ${presentation}` : null,
         notifications_enabled: notificationsEnabled,
@@ -175,11 +194,11 @@ export default function AddMedicationWizard() {
       };
 
       await api.post('/medications', medicationData);
-      Alert.alert('¡Listo!', 'Medicamento agregado correctamente', [
+      Alert.alert(t('medications.saved'), t('medications.medicationAdded'), [
         { text: 'OK', onPress: () => router.back() }
       ]);
     } catch (error: any) {
-      Alert.alert('Error', 'No se pudo guardar el medicamento. Intenta de nuevo.');
+      Alert.alert(t('common.error'), t('medications.errorSave'));
     } finally {
       setSaving(false);
     }
@@ -190,7 +209,9 @@ export default function AddMedicationWizard() {
       <View style={styles.progressBar}>
         <View style={[styles.progressFill, { width: `${(currentStep / TOTAL_STEPS) * 100}%` }]} />
       </View>
-      <Text style={styles.progressText}>Paso {currentStep} de {TOTAL_STEPS}</Text>
+      <Text style={styles.progressText}>
+        {t('onboarding.step', { current: currentStep, total: TOTAL_STEPS })}
+      </Text>
     </View>
   );
 
@@ -198,11 +219,11 @@ export default function AddMedicationWizard() {
     <View style={styles.stepContent}>
       <View style={styles.stepHeader}>
         <Ionicons name="medical" size={40} color="#2196F3" />
-        <Text style={styles.stepTitle}>¿Qué medicamento es?</Text>
+        <Text style={styles.stepTitle}>{t('medications.whatMedication')}</Text>
       </View>
 
       <View style={styles.inputGroup}>
-        <Text style={styles.label}>Nombre del medicamento *</Text>
+        <Text style={styles.label}>{t('medications.name')} *</Text>
         <TextInput
           style={styles.input}
           value={medicationName}
@@ -214,7 +235,7 @@ export default function AddMedicationWizard() {
       </View>
 
       <View style={styles.inputGroup}>
-        <Text style={styles.label}>Presentación (opcional)</Text>
+        <Text style={styles.label}>{t('medications.presentation')} ({t('common.optional')})</Text>
         <View style={styles.optionsGrid}>
           {PRESENTATION_OPTIONS.map((option) => (
             <TouchableOpacity
@@ -225,16 +246,16 @@ export default function AddMedicationWizard() {
               ]}
               onPress={() => setPresentation(option.value === presentation ? '' : option.value)}
             >
-              <Ionicons 
-                name={option.icon as any} 
-                size={18} 
-                color={presentation === option.value ? 'white' : '#666'} 
+              <Ionicons
+                name={option.icon as any}
+                size={18}
+                color={presentation === option.value ? 'white' : '#666'}
               />
               <Text style={[
                 styles.optionChipText,
                 presentation === option.value && styles.optionChipTextSelected
               ]}>
-                {option.label}
+                {t(option.labelKey)}
               </Text>
             </TouchableOpacity>
           ))}
@@ -247,7 +268,7 @@ export default function AddMedicationWizard() {
     <View style={styles.stepContent}>
       <View style={styles.stepHeader}>
         <Ionicons name="repeat" size={40} color="#FF9800" />
-        <Text style={styles.stepTitle}>¿Cada cuánto?</Text>
+        <Text style={styles.stepTitle}>{t('medications.howOften')}</Text>
       </View>
 
       <View style={styles.frequencyOptions}>
@@ -277,15 +298,75 @@ export default function AddMedicationWizard() {
       </View>
 
       {frequency === 'custom' && (
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Especifica la frecuencia</Text>
-          <TextInput
-            style={styles.input}
-            value={customFrequency}
-            onChangeText={setCustomFrequency}
-            placeholder="Ej: Cada 3 días, Lunes y Viernes..."
-            placeholderTextColor="#999"
-          />
+        <View style={styles.customContainer}>
+          <View style={styles.customTypeRow}>
+            <TouchableOpacity
+              style={[styles.customTypeButton, customType === 'hours' && styles.customTypeButtonSelected]}
+              onPress={() => setCustomType('hours')}
+            >
+              <Ionicons name="time-outline" size={18} color={customType === 'hours' ? '#2196F3' : '#666'} />
+              <Text style={[styles.customTypeText, customType === 'hours' && styles.customTypeTextSelected]}>
+                {t('medications.everyXHours')}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.customTypeButton, customType === 'days' && styles.customTypeButtonSelected]}
+              onPress={() => setCustomType('days')}
+            >
+              <Ionicons name="calendar-outline" size={18} color={customType === 'days' ? '#2196F3' : '#666'} />
+              <Text style={[styles.customTypeText, customType === 'days' && styles.customTypeTextSelected]}>
+                {t('medications.daysOfWeek')}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {customType === 'hours' && (
+            <View style={styles.customSubSection}>
+              <View style={styles.hoursSelector}>
+                <TouchableOpacity
+                  style={styles.hourButton}
+                  onPress={() => setCustomHours(h => Math.max(1, h - 1))}
+                >
+                  <Text style={styles.hourButtonText}>−</Text>
+                </TouchableOpacity>
+                <Text style={styles.hoursValue}>{customHours}</Text>
+                <TouchableOpacity
+                  style={styles.hourButton}
+                  onPress={() => setCustomHours(h => Math.min(23, h + 1))}
+                >
+                  <Text style={styles.hourButtonText}>+</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.customInfoText}>
+                {t('medications.willTakeEvery', { hours: customHours })}
+              </Text>
+            </View>
+          )}
+
+          {customType === 'days' && (
+            <View style={styles.customSubSection}>
+              <View style={styles.daysRow}>
+                {['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sa', 'Do'].map(day => (
+                  <TouchableOpacity
+                    key={day}
+                    style={[styles.dayButton, selectedDays.includes(day) && styles.dayButtonSelected]}
+                    onPress={() => setSelectedDays(prev =>
+                      prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]
+                    )}
+                  >
+                    <Text style={[styles.dayButtonText, selectedDays.includes(day) && styles.dayButtonTextSelected]}>
+                      {day}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              {selectedDays.length > 0 && (
+                <Text style={styles.customInfoText}>
+                  {t('medications.willTakeOnDays')}
+                </Text>
+              )}
+            </View>
+          )}
         </View>
       )}
     </View>
@@ -293,76 +374,82 @@ export default function AddMedicationWizard() {
 
   const renderStep3 = () => {
     const freqOption = FREQUENCY_OPTIONS.find(f => f.value === frequency);
-    const isFixedInterval = freqOption && freqOption.hours > 0 && freqOption.hours < 24;
+    const isFixedInterval =
+      (freqOption && freqOption.hours > 0 && freqOption.hours < 24) ||
+      (frequency === 'custom' && customType === 'hours');
+    const hintHours = frequency === 'custom' && customType === 'hours'
+      ? customHours
+      : (freqOption?.hours ?? 0);
     return (
-    <View style={styles.stepContent}>
-      <View style={styles.stepHeader}>
-        <Ionicons name="time" size={40} color="#4CAF50" />
-        <Text style={styles.stepTitle}>¿A qué hora?</Text>
-      </View>
-
-      {isFixedInterval && (
-        <View style={styles.intervalHint}>
-          <Ionicons name="information-circle-outline" size={18} color="#1976D2" />
-          <Text style={styles.intervalHintText}>
-            Agrega solo la primera toma del día. El resto se generará automáticamente cada {freqOption!.hours}h.
-          </Text>
+      <View style={styles.stepContent}>
+        <View style={styles.stepHeader}>
+          <Ionicons name="time" size={40} color="#4CAF50" />
+          <Text style={styles.stepTitle}>{t('medications.whatTime')}</Text>
         </View>
-      )}
 
-      <View style={styles.timesContainer}>
-        {scheduleTimes.length > 0 ? (
-          <View style={styles.timesList}>
-            {scheduleTimes.map((time) => (
-              <View key={time} style={styles.timeChip}>
-                <Ionicons name="alarm" size={18} color="#4CAF50" />
-                <Text style={styles.timeChipText}>{time}</Text>
-                <TouchableOpacity onPress={() => removeTime(time)}>
-                  <Ionicons name="close-circle" size={22} color="#f44336" />
-                </TouchableOpacity>
-              </View>
-            ))}
-          </View>
-        ) : (
-          <View style={styles.emptyTimes}>
-            <Ionicons name="alarm-outline" size={48} color="#ccc" />
-            <Text style={styles.emptyTimesText}>Aún no has agregado horarios</Text>
+        {isFixedInterval && (
+          <View style={styles.intervalHint}>
+            <Ionicons name="information-circle-outline" size={18} color="#1976D2" />
+            <Text style={styles.intervalHintText}>
+              {t('medications.intervalHint', { hours: hintHours })}
+            </Text>
           </View>
         )}
 
-        <TouchableOpacity
-          style={styles.addTimeButton}
-          onPress={() => {
-            setTempTime(new Date());
-            setShowTimePicker(true);
-          }}
-        >
-          <Ionicons name="add-circle" size={24} color="white" />
-          <Text style={styles.addTimeButtonText}>Agregar horario</Text>
-        </TouchableOpacity>
-      </View>
+        <View style={styles.timesContainer}>
+          {scheduleTimes.length > 0 ? (
+            <View style={styles.timesList}>
+              {scheduleTimes.map((time) => (
+                <View key={time} style={styles.timeChip}>
+                  <Ionicons name="alarm" size={18} color="#4CAF50" />
+                  <Text style={styles.timeChipText}>{time}</Text>
+                  <TouchableOpacity onPress={() => removeTime(time)}>
+                    <Ionicons name="close-circle" size={22} color="#f44336" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <View style={styles.emptyTimes}>
+              <Ionicons name="alarm-outline" size={48} color="#ccc" />
+              <Text style={styles.emptyTimesText}>{t('medications.noSchedules')}</Text>
+            </View>
+          )}
 
-      {showTimePicker && (
-        <DateTimePicker
-          value={tempTime}
-          mode="time"
-          is24Hour={true}
-          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-          onChange={addTime}
-        />
-      )}
-    </View>
-  );};
+          <TouchableOpacity
+            style={styles.addTimeButton}
+            onPress={() => {
+              setTempTime(new Date());
+              setShowTimePicker(true);
+            }}
+          >
+            <Ionicons name="add-circle" size={24} color="white" />
+            <Text style={styles.addTimeButtonText}>{t('medications.addSchedule')}</Text>
+          </TouchableOpacity>
+        </View>
+
+        {showTimePicker && (
+          <DateTimePicker
+            value={tempTime}
+            mode="time"
+            is24Hour={true}
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={addTime}
+          />
+        )}
+      </View>
+    );
+  };
 
   const renderStep4 = () => (
     <View style={styles.stepContent}>
       <View style={styles.stepHeader}>
         <Ionicons name="eyedrop" size={40} color="#9C27B0" />
-        <Text style={styles.stepTitle}>¿Cuánto tomar?</Text>
+        <Text style={styles.stepTitle}>{t('medications.howMuch')}</Text>
       </View>
 
       <View style={styles.inputGroup}>
-        <Text style={styles.label}>Dosis</Text>
+        <Text style={styles.label}>{t('medications.dosage')}</Text>
         <TextInput
           style={styles.input}
           value={dosage}
@@ -373,7 +460,7 @@ export default function AddMedicationWizard() {
       </View>
 
       <View style={styles.suggestionsContainer}>
-        <Text style={styles.suggestionsTitle}>Sugerencias rápidas:</Text>
+        <Text style={styles.suggestionsTitle}>{t('medications.quickSuggestions')}</Text>
         <View style={styles.suggestionsGrid}>
           {DOSE_SUGGESTIONS.map((suggestion) => (
             <TouchableOpacity
@@ -401,22 +488,21 @@ export default function AddMedicationWizard() {
     <View style={styles.stepContent}>
       <View style={styles.stepHeader}>
         <Ionicons name="calendar" size={40} color="#E91E63" />
-        <Text style={styles.stepTitle}>¿Por cuánto tiempo?</Text>
+        <Text style={styles.stepTitle}>{t('medications.howLong')}</Text>
       </View>
 
-      {/* Fecha de inicio */}
       <View style={styles.inputGroup}>
-        <Text style={styles.label}>¿Desde cuándo?</Text>
+        <Text style={styles.label}>{t('medications.startDate')}</Text>
         <TouchableOpacity
           style={styles.dateButton}
           onPress={() => setShowStartDatePicker(true)}
         >
           <Ionicons name="calendar-outline" size={20} color="#2196F3" />
           <Text style={styles.dateButtonText}>
-            {startDate.toLocaleDateString('es-ES', { 
-              weekday: 'long', 
-              day: 'numeric', 
-              month: 'long' 
+            {startDate.toLocaleDateString('es-ES', {
+              weekday: 'long',
+              day: 'numeric',
+              month: 'long'
             })}
           </Text>
         </TouchableOpacity>
@@ -434,10 +520,9 @@ export default function AddMedicationWizard() {
         />
       )}
 
-      {/* Fecha de fin */}
       <View style={styles.inputGroup}>
-        <Text style={styles.label}>¿Hasta cuándo?</Text>
-        
+        <Text style={styles.label}>{t('medications.endDate')}</Text>
+
         <TouchableOpacity
           style={[
             styles.endDateOption,
@@ -451,7 +536,7 @@ export default function AddMedicationWizard() {
           ]}>
             {endDateOption === 'indefinite' && <View style={styles.radioInner} />}
           </View>
-          <Text style={styles.endDateOptionText}>Indefinido (tratamiento continuo)</Text>
+          <Text style={styles.endDateOptionText}>{t('medications.indefinite')}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -467,7 +552,7 @@ export default function AddMedicationWizard() {
           ]}>
             {endDateOption === 'specific' && <View style={styles.radioInner} />}
           </View>
-          <Text style={styles.endDateOptionText}>Fecha específica</Text>
+          <Text style={styles.endDateOptionText}>{t('medications.specificDate')}</Text>
         </TouchableOpacity>
 
         {endDateOption === 'specific' && (
@@ -477,13 +562,13 @@ export default function AddMedicationWizard() {
           >
             <Ionicons name="calendar-outline" size={20} color="#2196F3" />
             <Text style={styles.dateButtonText}>
-              {endDate 
-                ? endDate.toLocaleDateString('es-ES', { 
-                    weekday: 'long', 
-                    day: 'numeric', 
-                    month: 'long' 
+              {endDate
+                ? endDate.toLocaleDateString('es-ES', {
+                    weekday: 'long',
+                    day: 'numeric',
+                    month: 'long'
                   })
-                : 'Seleccionar fecha'
+                : t('medications.selectDate')
               }
             </Text>
           </TouchableOpacity>
@@ -503,14 +588,13 @@ export default function AddMedicationWizard() {
         />
       )}
 
-      {/* Toggle de notificaciones */}
       <View style={styles.notificationToggle}>
         <View style={styles.notificationInfo}>
           <Ionicons name="notifications" size={24} color="#FF9800" />
           <View style={styles.notificationTextContainer}>
-            <Text style={styles.notificationTitle}>Recordatorios</Text>
+            <Text style={styles.notificationTitle}>{t('medications.notifications')}</Text>
             <Text style={styles.notificationSubtitle}>
-              Recibir alertas para este medicamento
+              {t('medications.notificationsDesc')}
             </Text>
           </View>
         </View>
@@ -544,8 +628,8 @@ export default function AddMedicationWizard() {
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       {renderProgressBar()}
-      
-      <ScrollView 
+
+      <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -557,7 +641,7 @@ export default function AddMedicationWizard() {
         <TouchableOpacity style={styles.backButton} onPress={goBack}>
           <Ionicons name="arrow-back" size={20} color="#666" />
           <Text style={styles.backButtonText}>
-            {currentStep === 1 ? 'Cancelar' : 'Atrás'}
+            {currentStep === 1 ? t('common.cancel') : t('common.back')}
           </Text>
         </TouchableOpacity>
 
@@ -571,7 +655,7 @@ export default function AddMedicationWizard() {
           ) : (
             <>
               <Text style={styles.nextButtonText}>
-                {currentStep === TOTAL_STEPS ? 'Guardar' : 'Siguiente'}
+                {currentStep === TOTAL_STEPS ? t('common.save') : t('common.next')}
               </Text>
               {currentStep < TOTAL_STEPS && (
                 <Ionicons name="arrow-forward" size={20} color="white" />
@@ -736,6 +820,102 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 13,
     color: '#1565C0',
+  },
+  customContainer: {
+    marginTop: 8,
+    gap: 12,
+  },
+  customTypeRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  customTypeButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    backgroundColor: 'white',
+    gap: 8,
+  },
+  customTypeButtonSelected: {
+    borderColor: '#2196F3',
+    backgroundColor: '#E3F2FD',
+  },
+  customTypeText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#666',
+  },
+  customTypeTextSelected: {
+    color: '#2196F3',
+  },
+  customSubSection: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  hoursSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 28,
+    paddingVertical: 8,
+  },
+  hourButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#2196F3',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  hourButtonText: {
+    color: 'white',
+    fontSize: 26,
+    fontWeight: '600',
+    lineHeight: 30,
+  },
+  hoursValue: {
+    fontSize: 52,
+    fontWeight: 'bold',
+    color: '#212121',
+    minWidth: 64,
+    textAlign: 'center',
+  },
+  daysRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    paddingHorizontal: 4,
+  },
+  dayButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dayButtonSelected: {
+    backgroundColor: '#2196F3',
+    borderColor: '#2196F3',
+  },
+  dayButtonText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#666',
+  },
+  dayButtonTextSelected: {
+    color: 'white',
+  },
+  customInfoText: {
+    fontSize: 13,
+    color: '#888',
+    textAlign: 'center',
   },
   timesContainer: {
     gap: 20,
