@@ -175,35 +175,55 @@ export default function History() {
         </View>
       ) : (
         <>
-          <ScrollView
-            horizontal
-            style={styles.patientTabs}
-            showsHorizontalScrollIndicator={false}
-          >
-            {patients.map((patient) => (
-              <TouchableOpacity
-                key={patient.id}
-                style={[
-                  styles.patientTab,
-                  selectedPatient === patient.id && styles.patientTabActive,
-                ]}
-                onPress={() => {
-                  setSelectedPatient(patient.id);
-                  setStatusFilter('all');
-                  loadHistoryForPatient(patient.id);
-                }}
-              >
-                <Text
-                  style={[
-                    styles.patientTabText,
-                    selectedPatient === patient.id && styles.patientTabTextActive,
-                  ]}
-                >
-                  {patient.name}
+          <View style={styles.headerSection}>
+            <View style={styles.historyStatsRow}>
+              <View style={[styles.historyStatBadge, { backgroundColor: '#E8F5E9' }]}>
+                <Ionicons name="checkmark" size={14} color="#2E7D32" />
+                <Text style={[styles.historyStatText, { color: '#2E7D32' }]}>
+                  {logs.filter(l => l.status === 'taken').length} {t('history.taken')}
                 </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+              </View>
+              <View style={[styles.historyStatBadge, { backgroundColor: '#FFEBEE' }]}>
+                <Ionicons name="close" size={14} color="#C62828" />
+                <Text style={[styles.historyStatText, { color: '#C62828' }]}>
+                  {logs.filter(l => l.status === 'missed').length} {t('history.missed')}
+                </Text>
+              </View>
+              <View style={[styles.historyStatBadge, { backgroundColor: '#FFF3E0' }]}>
+                <Ionicons name="remove" size={14} color="#E65100" />
+                <Text style={[styles.historyStatText, { color: '#E65100' }]}>
+                  {logs.filter(l => l.status === 'skipped').length} {t('history.skipped')}
+                </Text>
+              </View>
+            </View>
+            <ScrollView
+              horizontal
+              style={styles.patientTabsScroll}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 4 }}
+            >
+              {patients.map((patient) => (
+                <TouchableOpacity
+                  key={patient.id}
+                  style={[
+                    styles.patientTabNew,
+                    selectedPatient === patient.id
+                      ? { backgroundColor: '#2196F3', borderColor: '#2196F3' }
+                      : { backgroundColor: '#f5f5f5', borderColor: '#e0e0e0' },
+                  ]}
+                  onPress={() => {
+                    setSelectedPatient(patient.id);
+                    setStatusFilter('all');
+                    loadHistoryForPatient(patient.id);
+                  }}
+                >
+                  <Text style={{ fontSize: 14, fontWeight: '500', color: selectedPatient === patient.id ? 'white' : '#666' }}>
+                    {patient.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
 
           <View style={styles.filterRow}>
             {FILTER_BUTTONS.map(btn => {
@@ -292,30 +312,38 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
-  patientTabs: {
+  headerSection: {
     backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    paddingTop: 12,
+  },
+  historyStatsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 12,
     paddingHorizontal: 16,
-    paddingVertical: 12,
   },
-  patientTab: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    marginRight: 12,
+  historyStatBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     borderRadius: 20,
-    backgroundColor: '#f5f5f5',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    gap: 4,
   },
-  patientTabActive: {
-    backgroundColor: '#2196F3',
+  historyStatText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
-  patientTabText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#666',
+  patientTabsScroll: {
+    marginBottom: 16,
   },
-  patientTabTextActive: {
-    color: 'white',
+  patientTabNew: {
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginRight: 8,
+    borderWidth: 1,
   },
   filterRow: {
     flexDirection: 'row',

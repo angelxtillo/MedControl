@@ -209,21 +209,26 @@ export default function Home() {
         </View>
       </View>
 
-      <View style={styles.statsContainer}>
-        <View style={[styles.statCard, { backgroundColor: '#4CAF50' }]}>
-          <Ionicons name="checkmark-circle" size={32} color="white" />
-          <Text style={styles.statNumber}>{dashboard.completed}</Text>
-          <Text style={styles.statLabel}>{t('home.completed')}</Text>
+      <View style={styles.summaryBar}>
+        <View style={styles.summaryStatItem}>
+          <Ionicons name="checkmark-circle" size={14} color="#2E7D32" />
+          <Text style={[styles.summaryStatText, { color: '#2E7D32' }]}>
+            {dashboard.completed} {t('home.completed')}
+          </Text>
         </View>
-        <View style={[styles.statCard, { backgroundColor: '#2196F3' }]}>
-          <Ionicons name="time" size={32} color="white" />
-          <Text style={styles.statNumber}>{dashboard.pending}</Text>
-          <Text style={styles.statLabel}>{t('home.pending')}</Text>
+        <Text style={styles.summarySeparator}>·</Text>
+        <View style={styles.summaryStatItem}>
+          <Ionicons name="time" size={14} color="#1565C0" />
+          <Text style={[styles.summaryStatText, { color: '#1565C0' }]}>
+            {dashboard.pending} {t('home.pending')}
+          </Text>
         </View>
-        <View style={[styles.statCard, { backgroundColor: '#f44336' }]}>
-          <Ionicons name="close-circle" size={32} color="white" />
-          <Text style={styles.statNumber}>{dashboard.missed}</Text>
-          <Text style={styles.statLabel}>{t('home.missed')}</Text>
+        <Text style={styles.summarySeparator}>·</Text>
+        <View style={styles.summaryStatItem}>
+          <Ionicons name="close-circle" size={14} color="#C62828" />
+          <Text style={[styles.summaryStatText, { color: '#C62828' }]}>
+            {dashboard.missed} {t('home.missed')}
+          </Text>
         </View>
       </View>
 
@@ -342,27 +347,35 @@ const styles = StyleSheet.create({
     marginTop: 4,
     textTransform: 'capitalize',
   },
-  statsContainer: {
+  summaryBar: {
     flexDirection: 'row',
-    padding: 16,
-    gap: 12,
-  },
-  statCard: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 16,
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 12,
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 16,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
   },
-  statNumber: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: 'white',
-    marginTop: 8,
+  summaryStatItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
-  statLabel: {
-    fontSize: 12,
-    color: 'white',
-    marginTop: 4,
+  summarySeparator: {
+    color: '#ccc',
+    marginHorizontal: 8,
+    fontSize: 16,
+  },
+  summaryStatText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
   content: {
     flex: 1,
