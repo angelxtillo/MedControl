@@ -532,6 +532,8 @@ export default function SettingsScreen() {
                 resizeMode="contain"
               />
 
+              <Text style={styles.nequiNote}>{t('donate.nequiNote')}</Text>
+
               <View style={styles.nequiInfoBox}>
                 <Text style={styles.nequiInfoText}>{t('donate.donateNequiMsg')}</Text>
               </View>
@@ -979,6 +981,13 @@ const styles = StyleSheet.create({
     color: '#212121',
     textAlign: 'center',
     marginBottom: 16,
+  },
+  nequiNote: {
+    fontSize: 12,
+    color: '#999',
+    textAlign: 'center',
+    marginBottom: 16,
+    lineHeight: 18,
   },
   nequiInfoBox: {
     backgroundColor: '#f5f5f5',
