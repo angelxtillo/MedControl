@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -53,17 +53,26 @@ export default function Home() {
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [retrying, setRetrying] = useState(false);
+  const lastScheduledDate = useRef<string>('');
+
+  // Registra el background task una sola vez al montar
+  useEffect(() => {
+    requestNotificationPermissions();
+    registerBackgroundTask();
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
       loadDashboard();
-      requestNotificationPermissions();
-      registerBackgroundTask();
     }, [])
   );
 
   const scheduleNotificationsForToday = async (medications: any[]) => {
     try {
+      const todayStr = new Date().toDateString();
+      if (lastScheduledDate.current === todayStr) return;
+      lastScheduledDate.current = todayStr;
+
       await cancelAllNotifications();
       const now = new Date();
       const pending = medications.filter(m => m.status === 'pending');
