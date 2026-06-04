@@ -13,7 +13,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { MedicationCard } from '../../components/MedicationCard';
 import api from '../../utils/api';
 import { useFocusEffect } from '@react-navigation/native';
-import { requestNotificationPermissions } from '../../utils/notifications';
+import { requestNotificationPermissions, scheduleMedicationNotification, cancelAllNotifications } from '../../utils/notifications';
 import { useTranslation } from 'react-i18next';
 
 interface DashboardData {
@@ -61,6 +61,25 @@ export default function Home() {
     }, [])
   );
 
+  const scheduleNotificationsForToday = async (medications: any[]) => {
+    try {
+      await cancelAllNotifications();
+      const pending = medications.filter(m => m.status === 'pending');
+      for (const item of pending) {
+        const [h, min] = (item.scheduled_time as string).split(':');
+        await scheduleMedicationNotification(
+          item.medication_id,
+          item.medication_name,
+          item.patient_name,
+          parseInt(h, 10),
+          parseInt(min, 10),
+        );
+      }
+    } catch (err) {
+      console.warn('Error programando notificaciones:', err);
+    }
+  };
+
   const loadDashboard = async () => {
     const maxAttempts = 3;
     const delay = 3000;
@@ -74,6 +93,7 @@ export default function Home() {
         ]);
         setDashboard(todayRes.data);
         setUpcomingDays(upcomingRes.data);
+        scheduleNotificationsForToday(todayRes.data.medications_today);
         setRetrying(false);
         setLoading(false);
         setRefreshing(false);
