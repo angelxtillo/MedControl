@@ -13,7 +13,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { MedicationCard } from '../../components/MedicationCard';
 import api from '../../utils/api';
 import { useFocusEffect } from '@react-navigation/native';
-import { requestNotificationPermissions, scheduleMedicationNotification, cancelAllNotifications } from '../../utils/notifications';
+import { requestNotificationPermissions, scheduleMedicationNotification, cancelAllNotifications, registerBackgroundTask } from '../../utils/notifications';
 import { useTranslation } from 'react-i18next';
 
 interface DashboardData {
@@ -58,21 +58,25 @@ export default function Home() {
     useCallback(() => {
       loadDashboard();
       requestNotificationPermissions();
+      registerBackgroundTask();
     }, [])
   );
 
   const scheduleNotificationsForToday = async (medications: any[]) => {
     try {
       await cancelAllNotifications();
+      const now = new Date();
       const pending = medications.filter(m => m.status === 'pending');
       for (const item of pending) {
-        const [h, min] = (item.scheduled_time as string).split(':');
+        const [h, m] = (item.scheduled_time as string).split(':').map(Number);
+        const triggerTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0);
+        const secondsUntil = Math.floor((triggerTime.getTime() - now.getTime()) / 1000);
+        if (secondsUntil <= 0) continue;
         await scheduleMedicationNotification(
           item.medication_id,
           item.medication_name,
           item.patient_name,
-          parseInt(h, 10),
-          parseInt(min, 10),
+          secondsUntil,
         );
       }
     } catch (err) {
