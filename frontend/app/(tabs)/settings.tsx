@@ -11,6 +11,7 @@ import {
   Switch,
   TextInput,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -33,6 +34,7 @@ export default function SettingsScreen() {
   const [invitationModalVisible, setInvitationModalVisible] = useState(false);
   const [inviteCode, setInviteCode] = useState('');
   const [acceptingInvite, setAcceptingInvite] = useState(false);
+  const [nequiModalVisible, setNequiModalVisible] = useState(false);
 
   const handleLogout = () => {
     Alert.alert(
@@ -110,14 +112,7 @@ export default function SettingsScreen() {
         url = 'https://ko-fi.com/medcontrol';
         break;
       case 'nequi':
-        Alert.alert(
-          'Donar con Nequi',
-          'Escanea el QR de MedControl en tu app Nequi\n\n' +
-          '🔑 Llave Nequi Negocios: 0092283304\n' +
-          '👤 Nombre: Medcontrol\n\n' +
-          '¡Gracias por tu apoyo! 💙',
-          [{ text: 'Entendido', style: 'default' }]
-        );
+        setNequiModalVisible(true);
         return;
     }
     
@@ -424,7 +419,7 @@ export default function SettingsScreen() {
               {/* Opciones de donación */}
               <Text style={styles.donateOptionsTitle}>{t('donate.chooseMethod')}</Text>
 
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[styles.donateOption, { backgroundColor: '#0070BA' }]}
                 onPress={() => openDonationLink('paypal')}
               >
@@ -433,7 +428,16 @@ export default function SettingsScreen() {
                 <Ionicons name="open-outline" size={18} color="white" />
               </TouchableOpacity>
 
-              <TouchableOpacity 
+              <TouchableOpacity
+                style={[styles.donateOption, { backgroundColor: '#FF5E5B' }]}
+                onPress={() => openDonationLink('kofi')}
+              >
+                <Ionicons name="heart" size={24} color="white" />
+                <Text style={styles.donateOptionText}>{t('donate.donateKofi')}</Text>
+                <Ionicons name="open-outline" size={18} color="white" />
+              </TouchableOpacity>
+
+              <TouchableOpacity
                 style={[styles.donateOption, { backgroundColor: '#E31C5F' }]}
                 onPress={() => openDonationLink('nequi')}
               >
@@ -496,6 +500,51 @@ export default function SettingsScreen() {
                 </TouchableOpacity>
               ))}
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal QR Nequi */}
+      <Modal
+        visible={nequiModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setNequiModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.nequiModalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{t('donate.donateNequiTitle')}</Text>
+              <TouchableOpacity
+                onPress={() => setNequiModalVisible(false)}
+                style={styles.closeButton}
+              >
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+              <Text style={styles.nequiScanText}>{t('donate.scanQR')}</Text>
+
+              <Image
+                source={require('../../assets/images/nequi-qr.jpeg')}
+                style={styles.nequiQRImage}
+                resizeMode="contain"
+              />
+
+              <View style={styles.nequiInfoBox}>
+                <Text style={styles.nequiInfoText}>{t('donate.donateNequiMsg')}</Text>
+              </View>
+
+              <TouchableOpacity
+                style={styles.nequiCloseButton}
+                onPress={() => setNequiModalVisible(false)}
+              >
+                <Text style={styles.nequiCloseButtonText}>{t('common.close')}</Text>
+              </TouchableOpacity>
+
+              <View style={styles.modalFooterSpace} />
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -910,6 +959,48 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     marginBottom: 8,
     textAlign: 'center',
+  },
+  // Nequi QR modal styles
+  nequiModalContent: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '90%',
+  },
+  nequiQRImage: {
+    width: 280,
+    height: 280,
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  nequiScanText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#212121',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  nequiInfoBox: {
+    backgroundColor: '#f5f5f5',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  nequiInfoText: {
+    fontSize: 14,
+    color: '#444',
+    lineHeight: 22,
+  },
+  nequiCloseButton: {
+    backgroundColor: '#E31C5F',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  nequiCloseButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
   },
   // Invite acceptance modal styles
   inviteIconBox: {

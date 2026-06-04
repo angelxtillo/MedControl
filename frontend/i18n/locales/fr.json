@@ -351,7 +351,11 @@
     "freeAccess": "Permettre à plus de gens d'y accéder gratuitement",
     "chooseMethod": "Choisissez votre méthode préférée:",
     "gratitude1": "💙 Chaque contribution, quel que soit le montant, signifie beaucoup et nous motive à continuer à nous améliorer.",
-    "gratitude2": "Si vous ne pouvez pas donner, pas de souci. Vous pouvez aussi beaucoup aider en partageant l'app avec ceux qui en ont besoin ou en laissant un avis positif."
+    "gratitude2": "Si vous ne pouvez pas donner, pas de souci. Vous pouvez aussi beaucoup aider en partageant l'app avec ceux qui en ont besoin ou en laissant un avis positif.",
+    "donateKofi": "Ko-fi",
+    "donateNequiTitle": "Faire un don avec Nequi",
+    "scanQR": "Scannez ce code QR avec votre app Nequi",
+    "donateNequiMsg": "Scannez le QR de MedControl dans votre app Nequi\n\n🔑 Clé Nequi Entreprise : 0092283304\n👤 Nom : Medcontrol\n\nVous pouvez aussi chercher \"Medcontrol\" dans Nequi Negocios\n\nMerci pour votre soutien ! 💙"
   },
   "languages": {
     "title": "Sélectionner la langue",

@@ -351,7 +351,11 @@
     "freeAccess": "Let more people access it for free",
     "chooseMethod": "Choose your preferred method:",
     "gratitude1": "💙 Every contribution, regardless of amount, means a lot and motivates us to keep improving.",
-    "gratitude2": "If you can't donate, don't worry. You can also help a lot by sharing the app with those who need it or leaving a positive review."
+    "gratitude2": "If you can't donate, don't worry. You can also help a lot by sharing the app with those who need it or leaving a positive review.",
+    "donateKofi": "Ko-fi",
+    "donateNequiTitle": "Donate with Nequi",
+    "scanQR": "Scan this QR code with your Nequi app",
+    "donateNequiMsg": "Scan MedControl's QR in your Nequi app\n\n🔑 Nequi Business Key: 0092283304\n👤 Name: Medcontrol\n\nYou can also search \"Medcontrol\" in Nequi Negocios\n\nThank you for your support! 💙"
   },
   "languages": {
     "title": "Select language",
