@@ -28,6 +28,8 @@ export async function requestNotificationPermissions() {
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
       sound: 'default',
+      enableVibrate: true,
+      showBadge: true,
     });
   }
   
@@ -40,7 +42,7 @@ export async function scheduleMedicationNotification(
   patientName: string,
   hour: number,
   minute: number,
-) {
+): Promise<string | null> {
   const now = new Date();
   const trigger = new Date(
     now.getFullYear(),
@@ -51,19 +53,37 @@ export async function scheduleMedicationNotification(
     0,
   );
 
-  // Si la hora ya pasó hoy, no programar
-  if (trigger <= now) return;
+  if (trigger <= now) return null;
 
-  await Notifications.scheduleNotificationAsync({
+  // Garantizar que el canal existe antes de programar en Android
+  if (Platform.OS === 'android') {
+    await Notifications.setNotificationChannelAsync('medication-reminders', {
+      name: 'Recordatorios de Medicamentos',
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
+      sound: 'default',
+      enableVibrate: true,
+      showBadge: true,
+    });
+  }
+
+  const secondsUntilTrigger = Math.floor((trigger.getTime() - now.getTime()) / 1000);
+
+  const notificationId = await Notifications.scheduleNotificationAsync({
     content: {
       title: '💊 Recordatorio de medicamento',
       body: `Es hora de tomar ${medicationName} — Paciente: ${patientName}`,
-      data: { medicationId },
       sound: true,
-      priority: Notifications.AndroidNotificationPriority.HIGH,
+      priority: Notifications.AndroidNotificationPriority.MAX,
+      vibrate: [0, 250, 250, 250],
+      data: { medicationId },
     },
-    trigger,
+    trigger: Platform.OS === 'android'
+      ? { seconds: secondsUntilTrigger, channelId: 'medication-reminders' }
+      : trigger,
   });
+
+  return notificationId;
 }
 
 export async function cancelAllNotifications() {
