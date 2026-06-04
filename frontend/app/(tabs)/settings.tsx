@@ -527,7 +527,7 @@ export default function SettingsScreen() {
               <Text style={styles.nequiScanText}>{t('donate.scanQR')}</Text>
 
               <Image
-                source={require('../../assets/images/nequi-qr.jpeg')}
+                source={require('../../assets/images/nequi-qr.jpg')}
                 style={styles.nequiQRImage}
                 resizeMode="contain"
               />
