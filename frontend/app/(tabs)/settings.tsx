@@ -227,7 +227,7 @@ export default function SettingsScreen() {
             icon="mail"
             title={t('settings.contactSupport')}
             subtitle={t('settings.contactSupportDesc')}
-            onPress={() => Linking.openURL('mailto:soporte@medcontrol.app')}
+            onPress={() => Linking.openURL('mailto:support.medcontrol@gmail.com?subject=Soporte%20MedControl')}
           />
         </View>
 
