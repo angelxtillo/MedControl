@@ -349,7 +349,7 @@ export default function SettingsScreen() {
               </View>
 
               {/* Botón de donación */}
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.supportButton}
                 onPress={() => {
                   setAboutModalVisible(false);
@@ -358,6 +358,14 @@ export default function SettingsScreen() {
               >
                 <Ionicons name="heart" size={20} color="white" />
                 <Text style={styles.supportButtonText}>{t('settings.supportProject')} ❤️</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.privacyButton}
+                onPress={() => Linking.openURL('https://angelxtillo.github.io/MedControl/privacy-policy.html')}
+              >
+                <Ionicons name="document-text-outline" size={18} color="#1565C0" />
+                <Text style={styles.privacyButtonText}>{t('settings.privacyPolicy')}</Text>
               </TouchableOpacity>
 
               <View style={styles.modalFooterSpace} />
@@ -863,6 +871,21 @@ const styles = StyleSheet.create({
     color: '#E65100',
     lineHeight: 20,
     marginBottom: 8,
+  },
+  privacyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#e0e0e0',
+    marginTop: 8,
+  },
+  privacyButtonText: {
+    fontSize: 15,
+    color: '#1565C0',
+    fontWeight: '500',
   },
   supportButton: {
     flexDirection: 'row',
