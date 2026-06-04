@@ -1,10 +1,19 @@
 import '../i18n'; // initialize i18n before any component calls t()
-import { Stack } from 'expo-router';
+import { useEffect } from 'react';
+import { Stack, router } from 'expo-router';
 import { AuthProvider } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
 
 function AppStack() {
   const { t } = useTranslation();
+  const { user, loading } = useAuth();
+
+  useEffect(() => {
+    if (!user && !loading) {
+      router.replace('/');
+    }
+  }, [user, loading]);
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />
