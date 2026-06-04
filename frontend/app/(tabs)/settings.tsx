@@ -106,10 +106,16 @@ export default function SettingsScreen() {
       case 'paypal':
         url = 'https://www.paypal.com/ncp/payment/RVPPJA6DAQDZN';
         break;
+      case 'kofi':
+        url = 'https://ko-fi.com/medcontrol';
+        break;
       case 'nequi':
         Alert.alert(
           'Donar con Nequi',
-          'Puedes enviar tu aporte al número:\n\n📱 313 453 8132\n\nA nombre de: Angel Portillo\n\n¡Gracias por tu apoyo! 💙',
+          'Escanea el QR de MedControl en tu app Nequi\n\n' +
+          '🔑 Llave Nequi Negocios: 0092283304\n' +
+          '👤 Nombre: Medcontrol\n\n' +
+          '¡Gracias por tu apoyo! 💙',
           [{ text: 'Entendido', style: 'default' }]
         );
         return;
