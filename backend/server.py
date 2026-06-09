@@ -9,6 +9,8 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import datetime, timedelta
+
+MISSED_GRACE_MINUTES = 30  # margen antes de marcar una dosis como "perdida"
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 from bson import ObjectId
@@ -236,6 +238,13 @@ def should_show_today(med: dict, weekday: int) -> bool:
         if day_name in frequency and day_num == weekday:
             return True
     return False
+
+def med_baseline_local(med: dict, timezone_offset: int):
+    """Hora local desde la cual cuentan las dosis: cuando se creó o editó el medicamento."""
+    base = med.get("updated_at") or med.get("created_at")
+    if not base:
+        return None
+    return base + timedelta(minutes=timezone_offset)
 
 # ============= INVITATION HELPERS =============
 def generate_invitation_code() -> str:
@@ -666,6 +675,7 @@ async def update_medication(
     
     update_data = {k: v for k, v in medication.dict().items() if v is not None}
     if update_data:
+        update_data["updated_at"] = datetime.utcnow()
         await db.medications.update_one(
             {"_id": ObjectId(medication_id)},
             {"$set": update_data}
@@ -811,10 +821,18 @@ async def get_logs(
                 scheduled_dt = f"{check_date_str}T{normalized_time}:00"
 
                 try:
-                    if datetime.fromisoformat(scheduled_dt) >= now_local:
+                    if datetime.fromisoformat(scheduled_dt) + timedelta(minutes=MISSED_GRACE_MINUTES) >= now_local:
                         continue
                 except (ValueError, TypeError):
                     continue
+
+                baseline = med_baseline_local(med, timezone_offset)
+                if baseline is not None:
+                    try:
+                        if datetime.fromisoformat(scheduled_dt) < baseline:
+                            continue
+                    except (ValueError, TypeError):
+                        pass
 
                 if (med_id, scheduled_dt) in existing_keys:
                     continue
@@ -964,13 +982,22 @@ async def get_today_dashboard(user_id: str = Depends(get_current_user), timezone
             scheduled_datetime = f"{today_str}T{normalized_time}:00"
             log = logs_by_key.get((str(med["_id"]), scheduled_datetime))
 
+            baseline = med_baseline_local(med, timezone_offset)
+            if not log and baseline is not None:
+                try:
+                    if datetime.fromisoformat(scheduled_datetime) < baseline:
+                        continue
+                except (ValueError, TypeError):
+                    pass
+
             # Determine actual status before building the item
             if log:
                 item_status = log["status"]
             else:
                 try:
                     scheduled = datetime.fromisoformat(scheduled_datetime)
-                    item_status = "missed" if now_local > scheduled else "pending"
+                    grace = timedelta(minutes=MISSED_GRACE_MINUTES)
+                    item_status = "missed" if now_local > scheduled + grace else "pending"
                 except (ValueError, TypeError):
                     item_status = "pending"
 
