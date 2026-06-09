@@ -9,6 +9,9 @@ import {
   Alert,
   ActivityIndicator,
   FlatList,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../utils/api';
@@ -203,7 +206,10 @@ export default function CaregiversManager({
         transparent={true}
         onRequestClose={() => { setModalVisible(false); setDirectMode(false); setInviteEmail(''); }}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{t('caregivers.inviteByEmail')}</Text>
@@ -215,7 +221,7 @@ export default function CaregiversManager({
               </TouchableOpacity>
             </View>
 
-            <View style={styles.modalBody}>
+            <ScrollView style={styles.modalBody} keyboardShouldPersistTaps="handled">
               {!directMode ? (
                 <>
                   <Text style={styles.modalDescription}>
@@ -279,7 +285,7 @@ export default function CaregiversManager({
                   </TouchableOpacity>
                 </>
               )}
-            </View>
+            </ScrollView>
 
             <View style={styles.modalFooter}>
               <TouchableOpacity
@@ -306,7 +312,7 @@ export default function CaregiversManager({
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

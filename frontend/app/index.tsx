@@ -27,6 +27,7 @@ export default function Index() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [checkingOnboarding, setCheckingOnboarding] = useState(true);
 
@@ -144,8 +145,19 @@ export default function Index() {
                 placeholderTextColor="#999"
                 value={password}
                 onChangeText={setPassword}
-                secureTextEntry
+                secureTextEntry={!showPassword}
               />
+              <TouchableOpacity
+                onPress={() => setShowPassword(v => !v)}
+                style={styles.eyeButton}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons
+                  name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                  size={20}
+                  color="#666"
+                />
+              </TouchableOpacity>
             </View>
 
             <TouchableOpacity
@@ -227,6 +239,10 @@ const styles = StyleSheet.create({
   },
   inputIcon: {
     marginRight: 12,
+  },
+  eyeButton: {
+    padding: 8,
+    marginRight: 4,
   },
   input: {
     flex: 1,

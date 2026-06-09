@@ -14,8 +14,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import api from '../../utils/api';
 import { format } from 'date-fns';
-import { es } from 'date-fns/locale';
+import { es, enUS, ptBR, fr as frLocale } from 'date-fns/locale';
 import { useTranslation } from 'react-i18next';
+import i18n from '../../i18n';
 
 interface Patient {
   id: string;
@@ -42,6 +43,15 @@ const FILTER_BUTTONS: { key: StatusFilter; labelKey: string; activeColor: string
   { key: 'skipped', labelKey: 'history.filterSkipped', activeColor: '#FF9800' },
   { key: 'missed',  labelKey: 'history.filterMissed',  activeColor: '#f44336' },
 ];
+
+const dateFnsLocales: Record<string, typeof es> = { es, en: enUS, pt: ptBR, fr: frLocale };
+
+const dateFormats: Record<string, string> = {
+  es: "d 'de' MMMM, yyyy",
+  en: 'MMMM d, yyyy',
+  pt: "d 'de' MMMM, yyyy",
+  fr: 'd MMMM yyyy',
+};
 
 export default function History() {
   const { t } = useTranslation();
@@ -273,7 +283,10 @@ export default function History() {
                       <View style={styles.logInfo}>
                         <Text style={styles.medicationName}>{getMedicationName(log)}</Text>
                         <Text style={styles.logDate}>
-                          {format(new Date(log.scheduled_datetime), "d 'de' MMMM, yyyy", { locale: es })}
+                          {(() => {
+                            const lang = i18n.language?.split('-')[0] || 'es';
+                            return format(new Date(log.scheduled_datetime), dateFormats[lang] ?? dateFormats.es, { locale: dateFnsLocales[lang] ?? es });
+                          })()}
                         </Text>
                         <Text style={styles.scheduledTime}>
                           {t('history.scheduled', { time: formatTime(log.scheduled_datetime) })}

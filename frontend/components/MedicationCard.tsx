@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 
 interface MedicationCardProps {
   medicationName: string;
@@ -21,6 +22,8 @@ export const MedicationCard: React.FC<MedicationCardProps> = ({
   onMarkTaken,
   onMarkSkipped,
 }) => {
+  const { t } = useTranslation();
+
   const getStatusColor = () => {
     switch (status) {
       case 'taken':
@@ -49,14 +52,10 @@ export const MedicationCard: React.FC<MedicationCardProps> = ({
 
   const getStatusText = () => {
     switch (status) {
-      case 'taken':
-        return 'Tomado';
-      case 'missed':
-        return 'Perdido';
-      case 'skipped':
-        return 'Saltado';
-      default:
-        return 'Pendiente';
+      case 'taken':   return t('medications.statusTaken');
+      case 'missed':  return t('medications.statusMissed');
+      case 'skipped': return t('medications.statusSkipped');
+      default:        return t('medications.statusPending');
     }
   };
 
@@ -69,7 +68,7 @@ export const MedicationCard: React.FC<MedicationCardProps> = ({
         <View style={styles.infoContainer}>
           <Text style={styles.medicationName}>{medicationName}</Text>
           <Text style={styles.dosage}>{dosage}</Text>
-          <Text style={styles.patient}>Paciente: {patientName}</Text>
+          <Text style={styles.patient}>{t('medications.patientLabel', { name: patientName })}</Text>
         </View>
         <View style={[styles.statusBadge, { backgroundColor: getStatusColor() }]}>
           <Ionicons name={getStatusIcon() as any} size={20} color="white" />
@@ -86,11 +85,11 @@ export const MedicationCard: React.FC<MedicationCardProps> = ({
         <View style={styles.actionsContainer}>
           <TouchableOpacity style={styles.takenButton} onPress={onMarkTaken}>
             <Ionicons name="checkmark" size={20} color="white" />
-            <Text style={styles.buttonText}>Tomado</Text>
+            <Text style={styles.buttonText}>{t('home.taken')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.skipButton} onPress={onMarkSkipped}>
             <Ionicons name="close" size={20} color="white" />
-            <Text style={styles.buttonText}>Saltar</Text>
+            <Text style={styles.buttonText}>{t('home.skip')}</Text>
           </TouchableOpacity>
         </View>
       )}

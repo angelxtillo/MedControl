@@ -6,14 +6,16 @@ import {
   ScrollView,
   RefreshControl,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { MedicationCard } from '../../components/MedicationCard';
 import api from '../../utils/api';
 import { useFocusEffect } from '@react-navigation/native';
-import { requestNotificationPermissions, scheduleMedicationNotification, cancelAllNotifications, registerBackgroundTask } from '../../utils/notifications';
+import { requestNotificationPermissions, syncAllMedicationNotifications, MedicationForSchedule } from '../../utils/notifications';
 import { useTranslation } from 'react-i18next';
 
 interface DashboardData {
@@ -53,12 +55,9 @@ export default function Home() {
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [retrying, setRetrying] = useState(false);
-  const lastScheduledDate = useRef<string>('');
-
-  // Registra el background task una sola vez al montar
+  const lastLoad = useRef(0);
   useEffect(() => {
     requestNotificationPermissions();
-    registerBackgroundTask();
   }, []);
 
   useFocusEffect(
@@ -67,33 +66,66 @@ export default function Home() {
     }, [])
   );
 
-  const scheduleNotificationsForToday = async (medications: any[]) => {
+  const reconcileNotifications = async () => {
+    const RECONCILE_INTERVAL_MS = 6 * 60 * 60 * 1000;
     try {
-      const todayStr = new Date().toDateString();
-      if (lastScheduledDate.current === todayStr) return;
-      lastScheduledDate.current = todayStr;
-
-      await cancelAllNotifications();
-      const now = new Date();
-      const pending = medications.filter(m => m.status === 'pending');
-      for (const item of pending) {
-        const [h, m] = (item.scheduled_time as string).split(':').map(Number);
-        const triggerTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0);
-        const secondsUntil = Math.floor((triggerTime.getTime() - now.getTime()) / 1000);
-        if (secondsUntil <= 0) continue;
-        await scheduleMedicationNotification(
-          item.medication_id,
-          item.medication_name,
-          item.patient_name,
-          secondsUntil,
-        );
+      const last = await AsyncStorage.getItem('lastReconcile');
+      if (last && Date.now() - Number(last) < RECONCILE_INTERVAL_MS) {
+        return;
       }
+    } catch (_) {}
+    try {
+      const patientsRes = await api.get('/patients');
+      const patients: { id: string; name: string }[] = patientsRes.data;
+      const medsWithPatient: MedicationForSchedule[] = [];
+      await Promise.all(
+        patients.map(async (p) => {
+          const medsRes = await api.get(`/medications/patient/${p.id}`);
+          const meds: any[] = medsRes.data;
+          for (const med of meds) {
+            if (!med.active) continue;
+            medsWithPatient.push({
+              id: med.id ?? med._id,
+              name: med.name,
+              patient_name: p.name,
+              frequency: med.frequency,
+              schedule_times: med.schedule_times,
+              notifications_enabled: med.notifications_enabled,
+              end_date: med.end_date,
+            });
+          }
+        }),
+      );
+      await syncAllMedicationNotifications(medsWithPatient);
+      try {
+        await AsyncStorage.setItem('lastReconcile', String(Date.now()));
+      } catch (_) {}
     } catch (err) {
-      console.warn('Error programando notificaciones:', err);
+      console.warn('Error reconciliando notificaciones:', err);
     }
   };
 
-  const loadDashboard = async () => {
+  const loadDashboard = async (force = false) => {
+    if (!force && Date.now() - lastLoad.current < 30000) {
+      return;
+    }
+    lastLoad.current = Date.now();
+    let hadCache = false;
+
+    if (user?.id) {
+      try {
+        const cached = await AsyncStorage.getItem(`dashboard:${user.id}`);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          setDashboard(parsed.dashboard);
+          setUpcomingDays(parsed.upcomingDays);
+          setLoading(false);
+          setRefreshing(true);
+          hadCache = true;
+        }
+      } catch (_) {}
+    }
+
     const maxAttempts = 3;
     const delay = 3000;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -106,7 +138,15 @@ export default function Home() {
         ]);
         setDashboard(todayRes.data);
         setUpcomingDays(upcomingRes.data);
-        scheduleNotificationsForToday(todayRes.data.medications_today);
+        reconcileNotifications();
+        if (user?.id) {
+          try {
+            await AsyncStorage.setItem(
+              `dashboard:${user.id}`,
+              JSON.stringify({ dashboard: todayRes.data, upcomingDays: upcomingRes.data }),
+            );
+          } catch (_) {}
+        }
         setRetrying(false);
         setLoading(false);
         setRefreshing(false);
@@ -119,7 +159,9 @@ export default function Home() {
           setRetrying(false);
           setLoading(false);
           setRefreshing(false);
-          Alert.alert(t('common.error'), t('home.errorLoadDashboard'));
+          if (!hadCache) {
+            Alert.alert(t('common.error'), t('home.errorLoadDashboard'));
+          }
         }
       }
     }
@@ -171,7 +213,7 @@ export default function Home() {
 
   const onRefresh = () => {
     setRefreshing(true);
-    loadDashboard();
+    loadDashboard(true);
   };
 
   const getVisibleMedications = (medications: any[]): any[] => {
@@ -299,10 +341,16 @@ export default function Home() {
           </View>
         )}
 
+        {refreshing && !retrying && (
+          <View style={styles.updatingBanner}>
+            <Text style={styles.updatingText}>{t('home.updating')}</Text>
+          </View>
+        )}
+
         <Text style={styles.sectionTitle}>{t('home.medicationsToday')}</Text>
 
-        {loading ? (
-          <Text style={styles.emptyText}>{t('common.loading')}</Text>
+        {loading && visibleMeds.length === 0 ? (
+          <ActivityIndicator size="large" color="#2196F3" style={{ marginTop: 48 }} />
         ) : visibleMeds.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="checkmark-circle-outline" size={64} color="#ccc" />
@@ -479,6 +527,18 @@ const styles = StyleSheet.create({
   retryingText: {
     fontSize: 14,
     color: '#F57F17',
+    fontWeight: '500',
+  },
+  updatingBanner: {
+    backgroundColor: '#E3F2FD',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 12,
+    alignItems: 'center',
+  },
+  updatingText: {
+    fontSize: 14,
+    color: '#1565C0',
     fontWeight: '500',
   },
   patientGroupHeader: {

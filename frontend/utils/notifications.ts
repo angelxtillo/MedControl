@@ -1,144 +1,154 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
-import * as TaskManager from 'expo-task-manager';
-import * as BackgroundFetch from 'expo-background-fetch';
+
+export const MEDICATION_CHANNEL = 'medication-reminders';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
     shouldPlaySound: true,
-    shouldSetBadge: true,
+    shouldSetBadge: false,
   }),
 });
 
-const MEDICATION_CHANNEL = 'medication-reminders';
-const BACKGROUND_FETCH_TASK = 'background-medication-check';
-
-async function ensureAndroidChannel() {
+export async function requestNotificationPermissions(): Promise<boolean> {
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync(MEDICATION_CHANNEL, {
-      name: 'Recordatorios de Medicamentos',
+      name: 'Recordatorios de medicamentos',
       importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 250, 250, 250],
       sound: 'default',
-      enableVibrate: true,
-      showBadge: true,
+      vibrationPattern: [0, 250, 250, 250],
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
     });
   }
+  const current = await Notifications.getPermissionsAsync();
+  if (current.granted) return true;
+  const requested = await Notifications.requestPermissionsAsync();
+  return requested.granted;
 }
 
-export async function requestNotificationPermissions() {
-  const { status: existingStatus } = await Notifications.getPermissionsAsync();
-  let finalStatus = existingStatus;
+const DAY_TO_WEEKDAY: Record<string, number> = {
+  domingo: 1,
+  lunes: 2,
+  martes: 3,
+  miercoles: 4,
+  jueves: 5,
+  viernes: 6,
+  sabado: 7,
+};
 
-  if (existingStatus !== 'granted') {
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
-  }
-
-  if (finalStatus !== 'granted') {
-    return false;
-  }
-
-  await ensureAndroidChannel();
-  return true;
+function normalize(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .trim();
 }
 
-export async function scheduleMedicationNotification(
-  medicationId: string,
-  medicationName: string,
-  patientName: string,
-  secondsUntil: number,
-): Promise<string | null> {
-  if (secondsUntil <= 0) return null;
+function parseWeekdays(frequency: string): number[] {
+  const norm = normalize(frequency || '');
+  const result: number[] = [];
+  for (const [name, wd] of Object.entries(DAY_TO_WEEKDAY)) {
+    if (norm.includes(name)) result.push(wd);
+  }
+  return result;
+}
 
-  await ensureAndroidChannel();
+function pad(n: number): string {
+  return n.toString().padStart(2, '0');
+}
 
-  const notificationId = await Notifications.scheduleNotificationAsync({
-    content: {
+function isExpired(endDate?: string | null): boolean {
+  if (!endDate) return false;
+  const today = new Date().toISOString().slice(0, 10);
+  return today > endDate;
+}
+
+export interface MedicationForSchedule {
+  id: string;
+  name: string;
+  patient_name?: string;
+  frequency: string;
+  schedule_times: string[];
+  notifications_enabled?: boolean;
+  end_date?: string | null;
+}
+
+export async function scheduleMedicationNotifications(
+  med: MedicationForSchedule,
+): Promise<void> {
+  await cancelMedicationNotifications(med.id);
+  if (med.notifications_enabled === false) return;
+  if (isExpired(med.end_date)) return;
+
+  const weekdays = parseWeekdays(med.frequency);
+  const body =
+    `Es hora de tomar ${med.name}` +
+    (med.patient_name ? ` — Paciente: ${med.patient_name}` : '');
+
+  for (const time of med.schedule_times) {
+    const [h, m] = time.split(':').map(Number);
+    if (Number.isNaN(h) || Number.isNaN(m)) continue;
+
+    const content = {
       title: '💊 Recordatorio de medicamento',
-      body: `Es hora de tomar ${medicationName} — Paciente: ${patientName}`,
-      sound: true,
+      body,
+      sound: 'default' as const,
       priority: Notifications.AndroidNotificationPriority.MAX,
-      vibrate: [0, 250, 250, 250],
-      data: { medicationId },
-    },
-    trigger: {
-      seconds: secondsUntil,
-      channelId: MEDICATION_CHANNEL,
-    },
-  });
+      data: { medicationId: med.id },
+    };
 
-  return notificationId;
-}
-
-export async function cancelAllNotifications() {
-  await Notifications.cancelAllScheduledNotificationsAsync();
-}
-
-// ============= BACKGROUND TASK =============
-
-TaskManager.defineTask(BACKGROUND_FETCH_TASK, async () => {
-  try {
-    const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
-    const token = await AsyncStorage.getItem('token');
-    if (!token) return BackgroundFetch.BackgroundFetchResult.NoData;
-
-    const offset = new Date().getTimezoneOffset() * -1;
-    const response = await fetch(
-      `https://medcontrol-api-a7vo.onrender.com/api/dashboard/today?timezone_offset=${offset}`,
-      { headers: { Authorization: `Bearer ${token}` } },
-    );
-
-    if (!response.ok) return BackgroundFetch.BackgroundFetchResult.Failed;
-
-    const data = await response.json();
-    const medications: any[] = data.medications_today || [];
-
-    await Notifications.cancelAllScheduledNotificationsAsync();
-    await ensureAndroidChannel();
-
-    const now = new Date();
-    for (const med of medications) {
-      if (med.status !== 'pending') continue;
-      const [h, m] = (med.scheduled_time as string).split(':').map(Number);
-      const triggerTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0);
-      const secondsUntil = Math.floor((triggerTime.getTime() - now.getTime()) / 1000);
-      if (secondsUntil <= 60) continue;
-
+    if (weekdays.length > 0) {
+      for (const wd of weekdays) {
+        await Notifications.scheduleNotificationAsync({
+          identifier: `med-${med.id}-w${wd}-${pad(h)}${pad(m)}`,
+          content,
+          trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
+            weekday: wd,
+            hour: h,
+            minute: m,
+            channelId: MEDICATION_CHANNEL,
+          },
+        });
+      }
+    } else {
       await Notifications.scheduleNotificationAsync({
-        content: {
-          title: '💊 Recordatorio de medicamento',
-          body: `Es hora de tomar ${med.medication_name} — Paciente: ${med.patient_name}`,
-          sound: true,
-          priority: Notifications.AndroidNotificationPriority.MAX,
-          data: { medicationId: med.medication_id },
+        identifier: `med-${med.id}-${pad(h)}${pad(m)}`,
+        content,
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DAILY,
+          hour: h,
+          minute: m,
+          channelId: MEDICATION_CHANNEL,
         },
-        trigger: { seconds: secondsUntil, channelId: MEDICATION_CHANNEL },
       });
     }
-
-    return BackgroundFetch.BackgroundFetchResult.NewData;
-  } catch {
-    return BackgroundFetch.BackgroundFetchResult.Failed;
   }
-});
+}
 
-export async function registerBackgroundTask() {
-  try {
-    const status = await BackgroundFetch.getStatusAsync();
-    if (
-      status === BackgroundFetch.BackgroundFetchStatus.Restricted ||
-      status === BackgroundFetch.BackgroundFetchStatus.Denied
-    ) {
-      return;
+export async function cancelMedicationNotifications(medId: string): Promise<void> {
+  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+  for (const n of scheduled) {
+    const byData = (n.content?.data as any)?.medicationId === medId;
+    const byId =
+      typeof n.identifier === 'string' && n.identifier.startsWith(`med-${medId}-`);
+    if (byData || byId) {
+      await Notifications.cancelScheduledNotificationAsync(n.identifier);
     }
-    await BackgroundFetch.registerTaskAsync(BACKGROUND_FETCH_TASK, {
-      minimumInterval: 15 * 60,
-      stopOnTerminate: false,
-      startOnBoot: true,
-    });
-  } catch (err) {
-    console.log('Error registrando background task:', err);
+  }
+}
+
+export async function syncAllMedicationNotifications(
+  meds: MedicationForSchedule[],
+): Promise<void> {
+  await Notifications.cancelAllScheduledNotificationsAsync();
+  for (const med of meds) {
+    try {
+      await scheduleMedicationNotifications(med);
+    } catch (e) {
+      console.warn('No se pudo agendar el medicamento', med.id, e);
+    }
   }
 }

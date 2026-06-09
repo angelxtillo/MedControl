@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 
 interface PatientCardProps {
   id: string;
@@ -16,6 +17,7 @@ export const PatientCard: React.FC<PatientCardProps> = ({
   photo,
   onPress,
 }) => {
+  const { t } = useTranslation();
   return (
     <TouchableOpacity style={styles.card} onPress={onPress}>
       <View style={styles.avatarContainer}>
@@ -29,7 +31,7 @@ export const PatientCard: React.FC<PatientCardProps> = ({
       </View>
       <View style={styles.infoContainer}>
         <Text style={styles.name}>{name}</Text>
-        {age && <Text style={styles.age}>{age} años</Text>}
+        {age && <Text style={styles.age}>{age} {t('patients.years')}</Text>}
       </View>
       <Ionicons name="chevron-forward" size={24} color="#999" />
     </TouchableOpacity>

@@ -15,7 +15,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, router } from 'expo-router';
 import api from '../../utils/api';
-import { scheduleMedicationNotification } from '../../utils/notifications';
 
 const FREQUENCIES = [
   { label: 'Cada 4 horas', value: 'cada_4h', hours: 4, timesPerDay: 6 },
@@ -164,11 +163,6 @@ export default function AddMedicationImproved() {
         refill_alert_days: parseInt(refillAlertDays) || 7,
         active: true,
       });
-
-      // Schedule notifications
-      for (const time of normalizedTimes) {
-        await scheduleMedicationNotification(name, time, response.data.id);
-      }
 
       Alert.alert('Éxito', 'Medicamento agregado correctamente');
       router.back();

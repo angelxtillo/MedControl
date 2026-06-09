@@ -72,6 +72,7 @@
     "pendingCount": "Pendentes",
     "missedCount": "Perdidos",
     "connectingServer": "Conectando ao servidor...",
+    "updating": "Atualizando...",
     "markedTaken": "Medicamento marcado como tomado",
     "markedSkipped": "Medicamento marcado como ignorado",
     "errorLoad": "Não foi possível carregar o painel",
@@ -143,11 +144,11 @@
     "creator": "Criador",
     "noCaregivers": "Sem cuidadores atribuídos",
     "emailRequired": "Insira o e-mail do cuidador",
-    "inviteDescription": "O cuidador receberá um código por e-mail para entrar",
+    "inviteDescription": "O cuidador receberá um código por e-mail para entrar. Se não o receber em alguns minutos, peça que verifique a pasta de spam ou lixo eletrônico.",
     "inviteEmailLabel": "E-mail do cuidador a convidar",
     "inviteSend": "Enviar convite",
     "inviteSent": "Convite enviado",
-    "inviteSentDesc": "O cuidador receberá um código por e-mail",
+    "inviteSentDesc": "Enviamos um código para o e-mail informado. Se não chegar em alguns minutos, verifique a pasta de spam ou lixo eletrônico.",
     "directMode": "Já tem conta? Adicione diretamente",
     "inviteMode": "← Voltar ao convite por e-mail",
     "acceptInvitation": "Aceitar Convite",
@@ -158,7 +159,9 @@
     "codeExpired": "Código expirado",
     "codeInvalid": "Código inválido",
     "nowCaregiver": "Agora você é cuidador de {{name}}!",
-    "inviteSubtitle": "Insira um código para entrar como cuidador"
+    "inviteSubtitle": "Insira um código para entrar como cuidador",
+    "codeWrongEmail": "Este código foi enviado para outro e-mail. Entre com o e-mail correto.",
+    "errorAccept": "Não foi possível aceitar o convite"
   },
   "medications": {
     "title": "Medicamentos",
@@ -256,7 +259,14 @@
     "freq8h": "A cada 8 horas",
     "freq12h": "A cada 12 horas",
     "freqOnceDaily": "Uma vez ao dia",
-    "freqCustom": "Personalizado"
+    "freqFixedTimes": "Várias vezes ao dia",
+    "fixedTimesHint": "Adicione todos os horários em que o medicamento é tomado. Eles se repetirão todos os dias.",
+    "freqCustom": "Personalizado",
+    "statusTaken": "Tomado",
+    "statusSkipped": "Pulado",
+    "statusMissed": "Perdido",
+    "statusPending": "Pendente",
+    "patientLabel": "Paciente: {{name}}"
   },
   "history": {
     "title": "Histórico",
@@ -321,7 +331,19 @@
     "privacyPolicy": "Política de Privacidade",
     "comingSoon": "Em Breve",
     "comingSoonDesc": "Esta função estará disponível em breve",
-    "deleteAccount": "Excluir Conta",
+    "deleteAccount": {
+      "title": "Excluir Conta",
+      "warning": "Esta ação é permanente",
+      "intro": "Ao excluir sua conta, serão removidos de forma irreversível:",
+      "itemProfile": "Seu perfil de cuidador",
+      "itemPatients": "Todos os pacientes que você criou",
+      "itemMedications": "Todos os medicamentos associados",
+      "itemHistory": "Todo o histórico de doses registradas",
+      "passwordLabel": "Confirme sua senha para continuar:",
+      "passwordRequired": "Por favor, insira sua senha",
+      "confirm": "Excluir minha conta",
+      "errorDelete": "Não foi possível excluir a conta"
+    },
     "deleteAccountDesc": "Apague sua conta e todos os seus dados"
   },
   "about": {

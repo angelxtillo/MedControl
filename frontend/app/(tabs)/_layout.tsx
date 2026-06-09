@@ -1,7 +1,6 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 
@@ -9,8 +8,7 @@ export default function TabLayout() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   
-  // Calcular padding inferior para evitar superposición con botones del sistema
-  const bottomPadding = Platform.OS === 'android' ? Math.max(insets.bottom, 20) + 10 : insets.bottom + 10;
+  const bottomPadding = insets.bottom + 6;
   
   return (
     <Tabs
@@ -21,7 +19,7 @@ export default function TabLayout() {
           backgroundColor: 'white',
           borderTopWidth: 0,
           borderTopColor: '#e0e0e0',
-          height: 65 + bottomPadding,
+          height: 60 + bottomPadding,
           paddingBottom: bottomPadding,
           paddingTop: 8,
           elevation: 0,

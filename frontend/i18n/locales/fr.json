@@ -72,6 +72,7 @@
     "pendingCount": "En attente",
     "missedCount": "Manqués",
     "connectingServer": "Connexion au serveur...",
+    "updating": "Mise à jour...",
     "markedTaken": "Médicament marqué comme pris",
     "markedSkipped": "Médicament marqué comme sauté",
     "errorLoad": "Impossible de charger le tableau de bord",
@@ -143,11 +144,11 @@
     "creator": "Créateur",
     "noCaregivers": "Aucun soignant assigné",
     "emailRequired": "Entrez l'e-mail du soignant",
-    "inviteDescription": "Le soignant recevra un code par e-mail pour rejoindre",
+    "inviteDescription": "Le soignant recevra un code par e-mail pour rejoindre. S'il ne le reçoit pas dans quelques minutes, demandez-lui de vérifier son dossier spam ou courrier indésirable.",
     "inviteEmailLabel": "E-mail du soignant à inviter",
     "inviteSend": "Envoyer l'invitation",
     "inviteSent": "Invitation envoyée",
-    "inviteSentDesc": "Le soignant recevra un code par e-mail",
+    "inviteSentDesc": "Nous avons envoyé un code à l'adresse e-mail indiquée. Si vous ne le voyez pas dans quelques minutes, vérifiez le dossier spam ou courrier indésirable.",
     "directMode": "Déjà un compte ? Ajoutez-le directement",
     "inviteMode": "← Retour à l'invitation par e-mail",
     "acceptInvitation": "Accepter l'invitation",
@@ -158,7 +159,9 @@
     "codeExpired": "Code expiré",
     "codeInvalid": "Code invalide",
     "nowCaregiver": "Vous êtes maintenant soignant de {{name}} !",
-    "inviteSubtitle": "Entrez un code pour rejoindre en tant que soignant"
+    "inviteSubtitle": "Entrez un code pour rejoindre en tant que soignant",
+    "codeWrongEmail": "Ce code a été envoyé à un autre e-mail. Connectez-vous avec le bon e-mail.",
+    "errorAccept": "Impossible d'accepter l'invitation"
   },
   "medications": {
     "title": "Médicaments",
@@ -256,7 +259,14 @@
     "freq8h": "Toutes les 8 heures",
     "freq12h": "Toutes les 12 heures",
     "freqOnceDaily": "Une fois par jour",
-    "freqCustom": "Personnalisé"
+    "freqFixedTimes": "Plusieurs fois par jour",
+    "fixedTimesHint": "Ajoutez toutes les heures de prise du médicament. Elles se répéteront chaque jour.",
+    "freqCustom": "Personnalisé",
+    "statusTaken": "Pris",
+    "statusSkipped": "Sauté",
+    "statusMissed": "Manqué",
+    "statusPending": "En attente",
+    "patientLabel": "Patient : {{name}}"
   },
   "history": {
     "title": "Historique",
@@ -321,7 +331,19 @@
     "privacyPolicy": "Politique de Confidentialité",
     "comingSoon": "Bientôt",
     "comingSoonDesc": "Cette fonctionnalité sera bientôt disponible",
-    "deleteAccount": "Supprimer le Compte",
+    "deleteAccount": {
+      "title": "Supprimer le compte",
+      "warning": "Cette action est permanente",
+      "intro": "La suppression de votre compte effacera de manière irréversible :",
+      "itemProfile": "Votre profil de soignant",
+      "itemPatients": "Tous les patients que vous avez créés",
+      "itemMedications": "Tous les médicaments associés",
+      "itemHistory": "Tout l'historique des doses enregistrées",
+      "passwordLabel": "Confirmez votre mot de passe pour continuer :",
+      "passwordRequired": "Veuillez entrer votre mot de passe",
+      "confirm": "Supprimer mon compte",
+      "errorDelete": "Impossible de supprimer le compte"
+    },
     "deleteAccountDesc": "Supprimez votre compte et toutes vos données"
   },
   "about": {

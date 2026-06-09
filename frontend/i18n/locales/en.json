@@ -72,6 +72,7 @@
     "pendingCount": "Pending",
     "missedCount": "Missed",
     "connectingServer": "Connecting to server...",
+    "updating": "Updating...",
     "markedTaken": "Medication marked as taken",
     "markedSkipped": "Medication marked as skipped",
     "errorLoad": "Could not load dashboard",
@@ -143,11 +144,11 @@
     "creator": "Creator",
     "noCaregivers": "No caregivers assigned",
     "emailRequired": "Enter the caregiver's email",
-    "inviteDescription": "The caregiver will receive a code by email to join",
+    "inviteDescription": "The caregiver will receive a code by email to join. If they don't see it within a few minutes, ask them to check their spam or junk folder.",
     "inviteEmailLabel": "Caregiver email to invite",
     "inviteSend": "Send invitation",
     "inviteSent": "Invitation sent",
-    "inviteSentDesc": "The caregiver will receive a code by email",
+    "inviteSentDesc": "We sent a code to their email. If they don't see it within a few minutes, ask them to check their spam or junk folder.",
     "directMode": "Already has an account? Add directly",
     "inviteMode": "← Back to email invitation",
     "acceptInvitation": "Accept Invitation",
@@ -158,7 +159,9 @@
     "codeExpired": "Code expired",
     "codeInvalid": "Invalid code",
     "nowCaregiver": "You are now a caregiver for {{name}}!",
-    "inviteSubtitle": "Enter a code to join as caregiver"
+    "inviteSubtitle": "Enter a code to join as caregiver",
+    "codeWrongEmail": "This code was sent to a different email. Sign in with the correct email.",
+    "errorAccept": "Could not accept invitation"
   },
   "medications": {
     "title": "Medications",
@@ -256,7 +259,14 @@
     "freq8h": "Every 8 hours",
     "freq12h": "Every 12 hours",
     "freqOnceDaily": "Once a day",
-    "freqCustom": "Custom"
+    "freqFixedTimes": "Several times a day",
+    "fixedTimesHint": "Add each time the medication is taken. They'll repeat every day.",
+    "freqCustom": "Custom",
+    "statusTaken": "Taken",
+    "statusSkipped": "Skipped",
+    "statusMissed": "Missed",
+    "statusPending": "Pending",
+    "patientLabel": "Patient: {{name}}"
   },
   "history": {
     "title": "History",
@@ -321,7 +331,19 @@
     "privacyPolicy": "Privacy Policy",
     "comingSoon": "Coming Soon",
     "comingSoonDesc": "This feature will be available soon",
-    "deleteAccount": "Delete Account",
+    "deleteAccount": {
+      "title": "Delete Account",
+      "warning": "This action is permanent",
+      "intro": "Deleting your account will irreversibly remove:",
+      "itemProfile": "Your caregiver profile",
+      "itemPatients": "All patients you created",
+      "itemMedications": "All associated medications",
+      "itemHistory": "All recorded dose history",
+      "passwordLabel": "Confirm your password to continue:",
+      "passwordRequired": "Please enter your password",
+      "confirm": "Delete my account",
+      "errorDelete": "Could not delete account"
+    },
     "deleteAccountDesc": "Delete your account and all your data"
   },
   "about": {

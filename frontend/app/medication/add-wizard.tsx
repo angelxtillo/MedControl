@@ -9,6 +9,7 @@ import {
   Alert,
   Platform,
   ActivityIndicator,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,6 +17,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import api from '../../utils/api';
 import { useTranslation } from 'react-i18next';
+import { scheduleMedicationNotifications } from '../../utils/notifications';
 
 const TOTAL_STEPS = 5;
 
@@ -25,8 +27,9 @@ const FREQUENCY_OPTIONS = [
   { label: 'Cada 6 horas',  labelKey: 'medications.freq6h',        value: 'every_6h',   hours: 6  },
   { label: 'Cada 8 horas',  labelKey: 'medications.freq8h',        value: 'every_8h',   hours: 8  },
   { label: 'Cada 12 horas', labelKey: 'medications.freq12h',       value: 'every_12h',  hours: 12 },
-  { label: 'Una vez al día',labelKey: 'medications.freqOnceDaily', value: 'once_daily', hours: 24 },
-  { label: 'Personalizado', labelKey: 'medications.freqCustom',    value: 'custom',     hours: 0  },
+  { label: 'Una vez al día',     labelKey: 'medications.freqOnceDaily',  value: 'once_daily',  hours: 24 },
+  { label: 'Varias veces al día',labelKey: 'medications.freqFixedTimes', value: 'fixed_times', hours: 0  },
+  { label: 'Personalizado',      labelKey: 'medications.freqCustom',     value: 'custom',      hours: 0  },
 ];
 
 // Labels stay as i18n keys — values are stored in MongoDB as-is
@@ -53,7 +56,8 @@ const getDayNames = (lang: string): string[] => {
 const SPANISH_DAYS = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sa', 'Do'];
 
 export default function AddMedicationWizard() {
-  const { patientId } = useLocalSearchParams();
+  const { patientId, patientName: patientNameParam } = useLocalSearchParams();
+  const patientName = Array.isArray(patientNameParam) ? patientNameParam[0] : (patientNameParam ?? '');
   const { t, i18n } = useTranslation();
   const [currentStep, setCurrentStep] = useState(1);
   const [saving, setSaving] = useState(false);
@@ -119,13 +123,12 @@ export default function AddMedicationWizard() {
 
   const addTime = (event: any, selectedDate?: Date) => {
     setShowTimePicker(false);
-    if (selectedDate) {
-      const hours = selectedDate.getHours().toString().padStart(2, '0');
-      const minutes = selectedDate.getMinutes().toString().padStart(2, '0');
-      const timeString = `${hours}:${minutes}`;
-      if (!scheduleTimes.includes(timeString)) {
-        setScheduleTimes([...scheduleTimes, timeString].sort());
-      }
+    if (event?.type === 'dismissed' || !selectedDate) return;
+    const hours = selectedDate.getHours().toString().padStart(2, '0');
+    const minutes = selectedDate.getMinutes().toString().padStart(2, '0');
+    const timeString = `${hours}:${minutes}`;
+    if (!scheduleTimes.includes(timeString)) {
+      setScheduleTimes([...scheduleTimes, timeString].sort());
     }
   };
 
@@ -198,7 +201,17 @@ export default function AddMedicationWizard() {
         active: true,
       };
 
-      await api.post('/medications', medicationData);
+      const res = await api.post('/medications', medicationData);
+      const created = res.data;
+      await scheduleMedicationNotifications({
+        id: created.id ?? created._id,
+        name: created.name,
+        patient_name: patientName || undefined,
+        frequency: created.frequency,
+        schedule_times: created.schedule_times,
+        notifications_enabled: created.notifications_enabled,
+        end_date: created.end_date,
+      });
       Alert.alert(t('common.success'), t('medications.successAdded'), [
         { text: 'OK', onPress: () => router.back() }
       ]);
@@ -401,6 +414,13 @@ export default function AddMedicationWizard() {
           </View>
         )}
 
+        {frequency === 'fixed_times' && (
+          <View style={styles.intervalHint}>
+            <Ionicons name="information-circle-outline" size={18} color="#1976D2" />
+            <Text style={styles.intervalHintText}>{t('medications.fixedTimesHint')}</Text>
+          </View>
+        )}
+
         <View style={styles.timesContainer}>
           {scheduleTimes.length > 0 ? (
             <View style={styles.timesList}>
@@ -528,7 +548,8 @@ export default function AddMedicationWizard() {
           display={Platform.OS === 'ios' ? 'spinner' : 'default'}
           onChange={(event, date) => {
             setShowStartDatePicker(false);
-            if (date) setStartDate(date);
+            if (event?.type === 'dismissed' || !date) return;
+            setStartDate(date);
           }}
         />
       )}
@@ -597,7 +618,8 @@ export default function AddMedicationWizard() {
           minimumDate={startDate}
           onChange={(event, date) => {
             setShowEndDatePicker(false);
-            if (date) setEndDate(date);
+            if (event?.type === 'dismissed' || !date) return;
+            setEndDate(date);
           }}
         />
       )}
@@ -643,13 +665,19 @@ export default function AddMedicationWizard() {
     <SafeAreaView style={styles.container} edges={['bottom']}>
       {renderProgressBar()}
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        {renderCurrentStep()}
-      </ScrollView>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {renderCurrentStep()}
+        </ScrollView>
+      </KeyboardAvoidingView>
 
       <View style={styles.footer}>
         <TouchableOpacity style={styles.backButton} onPress={goBack}>

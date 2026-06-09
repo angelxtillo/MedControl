@@ -12,8 +12,10 @@ import {
   TextInput,
   ActivityIndicator,
   Image,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -24,6 +26,7 @@ import api from '../../utils/api';
 export default function SettingsScreen() {
   const { t } = useTranslation();
   const { logout, user, deleteAccount } = useAuth();
+  const insets = useSafeAreaInsets();
   const [aboutModalVisible, setAboutModalVisible] = useState(false);
   const [donateModalVisible, setDonateModalVisible] = useState(false);
   const [languageModalVisible, setLanguageModalVisible] = useState(false);
@@ -53,14 +56,14 @@ export default function SettingsScreen() {
 
   const handleConfirmDelete = async () => {
     if (!deletePassword.trim()) {
-      Alert.alert('Error', 'Por favor ingresa tu contraseña');
+      Alert.alert(t('common.error'), t('settings.deleteAccount.passwordRequired'));
       return;
     }
     setDeleting(true);
     try {
       await deleteAccount(deletePassword);
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'No se pudo eliminar la cuenta');
+      Alert.alert(t('common.error'), error.message || t('settings.deleteAccount.errorDelete'));
     } finally {
       setDeleting(false);
       setDeletePassword('');
@@ -84,8 +87,13 @@ export default function SettingsScreen() {
         [{ text: t('common.confirm'), onPress: () => { setInvitationModalVisible(false); setInviteCode(''); } }]
       );
     } catch (error: any) {
-      const msg = error.response?.data?.detail || 'No se pudo aceptar la invitación';
-      Alert.alert('Error', msg);
+      const status = error.response?.status;
+      let msg: string;
+      if (status === 404)      msg = t('caregivers.codeInvalid');
+      else if (status === 400) msg = t('caregivers.codeExpired');
+      else if (status === 403) msg = t('caregivers.codeWrongEmail');
+      else                     msg = t('caregivers.errorAccept');
+      Alert.alert(t('common.error'), msg);
     } finally {
       setAcceptingInvite(false);
     }
@@ -256,7 +264,7 @@ export default function SettingsScreen() {
 
           <MenuItem
             icon="trash"
-            title={t('settings.deleteAccount')}
+            title={t('settings.deleteAccount.title')}
             subtitle={t('settings.deleteAccountDesc')}
             onPress={() => setDeleteModalVisible(true)}
             showArrow={false}
@@ -278,7 +286,7 @@ export default function SettingsScreen() {
         onRequestClose={() => setAboutModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+          <View style={[styles.modalContent, { paddingBottom: insets.bottom + 16 }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{t('about.title')}</Text>
               <TouchableOpacity
@@ -382,7 +390,7 @@ export default function SettingsScreen() {
         onRequestClose={() => setDonateModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.donateModalContent}>
+          <View style={[styles.donateModalContent, { paddingBottom: insets.bottom + 16 }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{t('donate.title')}</Text>
               <TouchableOpacity
@@ -474,7 +482,7 @@ export default function SettingsScreen() {
         onRequestClose={() => setLanguageModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.languageModalContent}>
+          <View style={[styles.languageModalContent, { paddingBottom: insets.bottom + 16 }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{t('languages.title')}</Text>
               <TouchableOpacity
@@ -520,7 +528,7 @@ export default function SettingsScreen() {
         onRequestClose={() => setNequiModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.nequiModalContent}>
+          <View style={[styles.nequiModalContent, { paddingBottom: insets.bottom + 16 }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{t('donate.donateNequiTitle')}</Text>
               <TouchableOpacity
@@ -566,8 +574,11 @@ export default function SettingsScreen() {
         transparent={true}
         onRequestClose={() => setInvitationModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
+          <View style={[styles.modalContent, { paddingBottom: insets.bottom + 16 }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{t('caregivers.acceptInvitation')}</Text>
               <TouchableOpacity
@@ -578,7 +589,7 @@ export default function SettingsScreen() {
               </TouchableOpacity>
             </View>
 
-            <View style={styles.modalBody}>
+            <ScrollView style={styles.modalBody} keyboardShouldPersistTaps="handled">
               <View style={styles.inviteIconBox}>
                 <Ionicons name="mail-open" size={40} color="#2196F3" />
               </View>
@@ -616,9 +627,9 @@ export default function SettingsScreen() {
               >
                 <Text style={styles.inviteCancelButtonText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
-            </View>
+            </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Modal Eliminar Cuenta */}
@@ -628,10 +639,13 @@ export default function SettingsScreen() {
         transparent={true}
         onRequestClose={() => setDeleteModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
+          <View style={[styles.modalContent, { paddingBottom: insets.bottom + 16 }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Eliminar Cuenta</Text>
+              <Text style={styles.modalTitle}>{t('settings.deleteAccount.title')}</Text>
               <TouchableOpacity
                 onPress={() => setDeleteModalVisible(false)}
                 style={styles.closeButton}
@@ -640,26 +654,26 @@ export default function SettingsScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               <View style={styles.deleteWarningBox}>
                 <Ionicons name="warning" size={24} color="#b71c1c" />
-                <Text style={styles.deleteWarningTitle}>Esta acción es permanente</Text>
+                <Text style={styles.deleteWarningTitle}>{t('settings.deleteAccount.warning')}</Text>
               </View>
 
               <Text style={styles.deleteInfoText}>
-                Al eliminar tu cuenta se borrarán de forma irreversible:
+                {t('settings.deleteAccount.intro')}
               </Text>
               <Text style={styles.deleteInfoText}>
-                • Tu perfil de cuidador{'\n'}
-                • Todos los pacientes que creaste{'\n'}
-                • Todos los medicamentos asociados{'\n'}
-                • Todo el historial de dosis registradas
+                • {t('settings.deleteAccount.itemProfile')}{'\n'}
+                • {t('settings.deleteAccount.itemPatients')}{'\n'}
+                • {t('settings.deleteAccount.itemMedications')}{'\n'}
+                • {t('settings.deleteAccount.itemHistory')}
               </Text>
 
-              <Text style={styles.deletePasswordLabel}>Confirma tu contraseña para continuar:</Text>
+              <Text style={styles.deletePasswordLabel}>{t('settings.deleteAccount.passwordLabel')}</Text>
               <TextInput
                 style={styles.deletePasswordInput}
-                placeholder="Contraseña"
+                placeholder={t('auth.password')}
                 secureTextEntry
                 value={deletePassword}
                 onChangeText={setDeletePassword}
@@ -674,7 +688,7 @@ export default function SettingsScreen() {
                 {deleting ? (
                   <ActivityIndicator color="white" />
                 ) : (
-                  <Text style={styles.deleteConfirmButtonText}>Eliminar mi cuenta</Text>
+                  <Text style={styles.deleteConfirmButtonText}>{t('settings.deleteAccount.confirm')}</Text>
                 )}
               </TouchableOpacity>
 
@@ -682,13 +696,13 @@ export default function SettingsScreen() {
                 style={styles.deleteCancelButton}
                 onPress={() => { setDeleteModalVisible(false); setDeletePassword(''); }}
               >
-                <Text style={styles.deleteCancelButtonText}>Cancelar</Text>
+                <Text style={styles.deleteCancelButtonText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
 
               <View style={styles.modalFooterSpace} />
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
@@ -1083,6 +1097,42 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
     color: '#666',
+  },
+  // Language modal styles
+  languageModalContent: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '80%',
+    paddingBottom: 16,
+  },
+  languageList: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  languageItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    marginVertical: 4,
+  },
+  languageItemActive: {
+    backgroundColor: '#E3F2FD',
+  },
+  languageFlag: {
+    fontSize: 28,
+    marginRight: 16,
+  },
+  languageName: {
+    fontSize: 16,
+    color: '#212121',
+    flex: 1,
+  },
+  languageNameActive: {
+    color: '#2196F3',
+    fontWeight: '600',
   },
   // Delete account modal styles
   deleteWarningBox: {

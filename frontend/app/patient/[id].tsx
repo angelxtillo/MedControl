@@ -18,6 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, router } from 'expo-router';
 import api from '../../utils/api';
+import { cancelMedicationNotifications } from '../../utils/notifications';
 import CaregiversManager from '../../components/CaregiversManager';
 import { useTranslation } from 'react-i18next';
 
@@ -122,6 +123,7 @@ export default function PatientDetail() {
           style: 'destructive',
           onPress: async () => {
             try {
+              await cancelMedicationNotifications(medicationId);
               await api.delete(`/medications/${medicationId}`);
               Alert.alert(t('common.success'), t('medications.deleted'));
               loadPatientData();
@@ -255,7 +257,7 @@ export default function PatientDetail() {
             <Text style={styles.sectionTitle}>{t('medications.title')}</Text>
             <TouchableOpacity
               style={styles.addButton}
-              onPress={() => router.push(`/medication/add-wizard?patientId=${id}`)}
+              onPress={() => router.push(`/medication/add-wizard?patientId=${id}&patientName=${encodeURIComponent(patient?.name ?? '')}`)}
             >
               <Ionicons name="add" size={24} color="white" />
             </TouchableOpacity>

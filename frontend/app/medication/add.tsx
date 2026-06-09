@@ -14,7 +14,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, router } from 'expo-router';
 import api from '../../utils/api';
-import { scheduleMedicationNotification } from '../../utils/notifications';
 
 export default function AddMedication() {
   const { patientId } = useLocalSearchParams();
@@ -69,11 +68,6 @@ export default function AddMedication() {
         refill_alert_days: parseInt(refillAlertDays) || 7,
         active: true,
       });
-
-      // Schedule notifications
-      for (const time of validTimes) {
-        await scheduleMedicationNotification(name, time, response.data.id);
-      }
 
       Alert.alert('Éxito', 'Medicamento agregado correctamente');
       router.back();

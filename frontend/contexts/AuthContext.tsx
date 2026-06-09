@@ -81,6 +81,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = async () => {
+    if (user?.id) {
+      await AsyncStorage.removeItem(`dashboard:${user.id}`);
+    }
+    await AsyncStorage.removeItem('lastReconcile');
     await AsyncStorage.removeItem('token');
     await AsyncStorage.removeItem('user');
     setToken(null);

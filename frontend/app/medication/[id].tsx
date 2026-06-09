@@ -17,6 +17,7 @@ import { useLocalSearchParams, router } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import api from '../../utils/api';
 import { useTranslation } from 'react-i18next';
+import { scheduleMedicationNotifications } from '../../utils/notifications';
 
 // Day abbreviations by language — only for display; Spanish keys are stored in MongoDB
 const getDayNames = (lang: string): string[] => {
@@ -37,8 +38,9 @@ const FREQUENCY_OPTIONS = [
   { label: 'Cada 6 horas',  labelKey: 'medications.freq6h',        value: 'every_6h',   hours: 6  },
   { label: 'Cada 8 horas',  labelKey: 'medications.freq8h',        value: 'every_8h',   hours: 8  },
   { label: 'Cada 12 horas', labelKey: 'medications.freq12h',       value: 'every_12h',  hours: 12 },
-  { label: 'Una vez al día',labelKey: 'medications.freqOnceDaily', value: 'once_daily', hours: 24 },
-  { label: 'Personalizado', labelKey: 'medications.freqCustom',    value: 'custom',     hours: 0  },
+  { label: 'Una vez al día',     labelKey: 'medications.freqOnceDaily',  value: 'once_daily',  hours: 24 },
+  { label: 'Varias veces al día',labelKey: 'medications.freqFixedTimes', value: 'fixed_times', hours: 0  },
+  { label: 'Personalizado',      labelKey: 'medications.freqCustom',     value: 'custom',      hours: 0  },
 ];
 
 // Day names must remain in Spanish — used to reconstruct frequency strings stored in MongoDB
@@ -62,6 +64,7 @@ export default function EditMedication() {
   const [endDate, setEndDate] = useState('');
   const [instructions, setInstructions] = useState('');
   const [active, setActive] = useState(true);
+  const [patientName, setPatientName] = useState('');
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [editingTimeIndex, setEditingTimeIndex] = useState<number | null>(null);
 
@@ -76,6 +79,7 @@ export default function EditMedication() {
         const medsResponse = await api.get(`/medications/patient/${patient.id}`);
         const medication = medsResponse.data.find((m: any) => m.id === id);
         if (medication) {
+          setPatientName(patient.name);
           setName(medication.name);
           setDosage(medication.dosage);
           const matchedOpt = FREQUENCY_OPTIONS.find(o => o.label === medication.frequency);
@@ -132,14 +136,19 @@ export default function EditMedication() {
     setShowTimePicker(true);
   };
 
-  const onTimePickerChange = (_event: any, selectedDate?: Date) => {
+  const onTimePickerChange = (event: any, selectedDate?: Date) => {
     setShowTimePicker(false);
-    if (selectedDate !== undefined && editingTimeIndex !== null) {
-      const hours = selectedDate.getHours().toString().padStart(2, '0');
-      const minutes = selectedDate.getMinutes().toString().padStart(2, '0');
-      updateTimeSlot(editingTimeIndex, `${hours}:${minutes}`);
-    }
+    const idx = editingTimeIndex;
     setEditingTimeIndex(null);
+    if (event?.type === 'dismissed' || selectedDate === undefined || idx === null) {
+      if (idx !== null && !scheduleTimes[idx]) {
+        removeTimeSlot(idx);
+      }
+      return;
+    }
+    const hours = selectedDate.getHours().toString().padStart(2, '0');
+    const minutes = selectedDate.getMinutes().toString().padStart(2, '0');
+    updateTimeSlot(idx, `${hours}:${minutes}`);
   };
 
   const getTimeAsDate = (timeStr: string): Date => {
@@ -163,27 +172,6 @@ export default function EditMedication() {
     return FREQUENCY_OPTIONS.find(f => f.value === selectedFreq)?.label || '';
   };
 
-  const expandScheduleTimes = (baseTime: string): string[] => {
-    let intervalHours: number;
-    if (selectedFreq === 'custom' && customType === 'hours') {
-      intervalHours = customHours;
-    } else {
-      const freqOpt = FREQUENCY_OPTIONS.find(f => f.value === selectedFreq);
-      if (!freqOpt || freqOpt.hours === 0 || freqOpt.hours >= 24) return scheduleTimes;
-      intervalHours = freqOpt.hours;
-    }
-    const parts = baseTime.split(':');
-    const baseMinutes = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
-    const intervalMinutes = intervalHours * 60;
-    const times: string[] = [];
-    let current = baseMinutes;
-    while (current < 1440) {
-      times.push(`${Math.floor(current / 60).toString().padStart(2, '0')}:${(current % 60).toString().padStart(2, '0')}`);
-      current += intervalMinutes;
-    }
-    return times;
-  };
-
   const handleSave = async () => {
     if (!name || !dosage || !selectedFreq) {
       Alert.alert(t('common.error'), t('medications.fillRequired'));
@@ -196,13 +184,9 @@ export default function EditMedication() {
       return;
     }
 
-    const freqOpt = FREQUENCY_OPTIONS.find(f => f.value === selectedFreq);
-    const shouldExpand =
-      (freqOpt && freqOpt.hours > 0 && freqOpt.hours < 24) ||
-      (selectedFreq === 'custom' && customType === 'hours');
-    const finalTimes = shouldExpand && validTimes.length > 0
-      ? expandScheduleTimes(validTimes[0])
-      : validTimes;
+    // Al editar, los horarios visibles en pantalla son la verdad: se guardan tal cual.
+    // La expansión automática por intervalo solo aplica al crear en el wizard.
+    const finalTimes = validTimes;
 
     setSaving(true);
     try {
@@ -214,6 +198,16 @@ export default function EditMedication() {
         end_date: endDate || null,
         instructions: instructions || null,
         active,
+      });
+
+      await scheduleMedicationNotifications({
+        id: String(id),
+        name,
+        patient_name: patientName,
+        frequency: getFrequencyLabel(),
+        schedule_times: finalTimes,
+        notifications_enabled: true,
+        end_date: endDate || null,
       });
 
       Alert.alert(t('common.success'), t('medications.medicationUpdated'));
