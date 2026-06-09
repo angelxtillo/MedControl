@@ -37,8 +37,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const storedToken = await AsyncStorage.getItem('token');
       const storedUser = await AsyncStorage.getItem('user');
       if (storedToken && storedUser) {
-        setToken(storedToken);
-        setUser(JSON.parse(storedUser));
+        try {
+          await axios.get(`${API_URL}/api/patients`, {
+            headers: { Authorization: `Bearer ${storedToken}` },
+            timeout: 60000,
+          });
+          setToken(storedToken);
+          setUser(JSON.parse(storedUser));
+        } catch (err: any) {
+          const status = err?.response?.status;
+          if (status === 401 || status === 403) {
+            await AsyncStorage.removeItem('token');
+            await AsyncStorage.removeItem('user');
+          } else {
+            setToken(storedToken);
+            setUser(JSON.parse(storedUser));
+          }
+        }
       }
     } catch (error) {
       console.error('Error loading auth:', error);

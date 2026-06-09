@@ -73,15 +73,6 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="ai-assistant"
-        options={{
-          title: t('tabs.assistant'),
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="chatbubbles" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
         name="settings"
         options={{
           title: t('tabs.more'),

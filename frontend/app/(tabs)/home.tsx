@@ -44,7 +44,7 @@ interface UpcomingDay {
 
 export default function Home() {
   const { t, i18n } = useTranslation();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [dashboard, setDashboard] = useState<DashboardData>({
     medications_today: [],
     completed: 0,
@@ -153,6 +153,10 @@ export default function Home() {
         return;
       } catch (error: any) {
         console.error(`Dashboard load attempt ${attempt} failed:`, error);
+        if (error?.response?.status === 401 || error?.response?.status === 403) {
+          await logout();
+          return;
+        }
         if (attempt < maxAttempts) {
           await new Promise(resolve => setTimeout(resolve, delay));
         } else {
