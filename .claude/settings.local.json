@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python *)"
+      "Bash(python *)",
+      "PowerShell($pkg = Get-Content \"C:\\\\Users\\\\Portillo\\\\Desktop\\\\MedControl-main\\\\frontend\\\\node_modules\\\\date-fns\\\\package.json\" | ConvertFrom-Json; $pkg.exports | Format-List)",
+      "Bash(npx tsc *)"
     ]
   }
 }
