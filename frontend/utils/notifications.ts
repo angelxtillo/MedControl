@@ -1,15 +1,37 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const MEDICATION_CHANNEL = 'medication-reminders';
 
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
+  handleNotification: async (notification) => {
+    const data = notification.request.content.data as any;
+
+    // Supresión de follow-ups si la dosis ya fue marcada
+    if (data?.followUp === true && data?.medicationId && data?.baseTime) {
+      const today = new Date().toISOString().slice(0, 10);
+      const key = `doseLogged:${data.medicationId}:${today}:${data.baseTime}`;
+      try {
+        const logged = await AsyncStorage.getItem(key);
+        if (logged) {
+          return {
+            shouldShowBanner: false,
+            shouldShowList: false,
+            shouldPlaySound: false,
+            shouldSetBadge: false,
+          };
+        }
+      } catch (_) {}
+    }
+
+    return {
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+    };
+  },
 });
 
 export async function requestNotificationPermissions(): Promise<boolean> {
@@ -59,6 +81,25 @@ function pad(n: number): string {
   return n.toString().padStart(2, '0');
 }
 
+interface TimeOffset {
+  hour: number;
+  minute: number;
+  dayOffset: number;
+  weekdayOffset: number;
+}
+
+function addMinutesToTime(hour: number, minute: number, addMinutes: number): TimeOffset {
+  const totalMinutes = hour * 60 + minute + addMinutes;
+  const dayOffset = Math.floor(totalMinutes / (24 * 60));
+  const adjustedMinutes = ((totalMinutes % (24 * 60)) + (24 * 60)) % (24 * 60);
+  return {
+    hour: Math.floor(adjustedMinutes / 60),
+    minute: adjustedMinutes % 60,
+    dayOffset,
+    weekdayOffset: dayOffset % 7,
+  };
+}
+
 function isExpired(endDate?: string | null): boolean {
   if (!endDate) return false;
   const today = new Date().toISOString().slice(0, 10);
@@ -83,27 +124,33 @@ export async function scheduleMedicationNotifications(
   if (isExpired(med.end_date)) return;
 
   const weekdays = parseWeekdays(med.frequency);
-  const body =
+  const mainBody =
     `Es hora de tomar ${med.name}` +
     (med.patient_name ? ` — Paciente: ${med.patient_name}` : '');
+  const followUpBody =
+    `Aún no se ha registrado ${med.name}` +
+    (med.patient_name ? ` — Paciente: ${med.patient_name}. Márcala como tomada u omitida.` : '. Márcala como tomada u omitida.');
 
   for (const time of med.schedule_times) {
     const [h, m] = time.split(':').map(Number);
     if (Number.isNaN(h) || Number.isNaN(m)) continue;
 
-    const content = {
+    const baseTimeStr = `${pad(h)}:${pad(m)}`;
+
+    const mainContent = {
       title: '💊 Recordatorio de medicamento',
-      body,
+      body: mainBody,
       sound: 'default' as const,
       priority: Notifications.AndroidNotificationPriority.MAX,
       data: { medicationId: med.id },
     };
 
+    // Notificación principal
     if (weekdays.length > 0) {
       for (const wd of weekdays) {
         await Notifications.scheduleNotificationAsync({
           identifier: `med-${med.id}-w${wd}-${pad(h)}${pad(m)}`,
-          content,
+          content: mainContent,
           trigger: {
             type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
             weekday: wd,
@@ -112,11 +159,35 @@ export async function scheduleMedicationNotifications(
             channelId: MEDICATION_CHANNEL,
           },
         });
+
+        // Follow-ups a +10 y +20 minutos
+        for (const offsetMin of [10, 20]) {
+          const offset = addMinutesToTime(h, m, offsetMin);
+          const adjustedWd = ((wd - 1 + offset.weekdayOffset) % 7) + 1;
+
+          await Notifications.scheduleNotificationAsync({
+            identifier: `med-${med.id}-w${wd}-f${offsetMin}-${pad(h)}${pad(m)}`,
+            content: {
+              title: '⏰ Recordatorio pendiente',
+              body: followUpBody,
+              sound: 'default' as const,
+              priority: Notifications.AndroidNotificationPriority.MAX,
+              data: { medicationId: med.id, followUp: true, baseTime: baseTimeStr },
+            },
+            trigger: {
+              type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
+              weekday: adjustedWd,
+              hour: offset.hour,
+              minute: offset.minute,
+              channelId: MEDICATION_CHANNEL,
+            },
+          });
+        }
       }
     } else {
       await Notifications.scheduleNotificationAsync({
         identifier: `med-${med.id}-${pad(h)}${pad(m)}`,
-        content,
+        content: mainContent,
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.DAILY,
           hour: h,
@@ -124,9 +195,34 @@ export async function scheduleMedicationNotifications(
           channelId: MEDICATION_CHANNEL,
         },
       });
+
+      // Follow-ups a +10 y +20 minutos (daily)
+      for (const offsetMin of [10, 20]) {
+        const offset = addMinutesToTime(h, m, offsetMin);
+
+        await Notifications.scheduleNotificationAsync({
+          identifier: `med-${med.id}-f${offsetMin}-${pad(h)}${pad(m)}`,
+          content: {
+            title: '⏰ Recordatorio pendiente',
+            body: followUpBody,
+            sound: 'default' as const,
+            priority: Notifications.AndroidNotificationPriority.MAX,
+            data: { medicationId: med.id, followUp: true, baseTime: baseTimeStr },
+          },
+          trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.DAILY,
+            hour: offset.hour,
+            minute: offset.minute,
+            channelId: MEDICATION_CHANNEL,
+          },
+        });
+      }
     }
   }
 }
+
+// Limitación: si la app está cerrada al dispararse el follow-up, sonará aunque la dosis
+// ya esté marcada en el backend. Se resolverá en v2 con FCM server-side.
 
 export async function cancelMedicationNotifications(medId: string): Promise<void> {
   const scheduled = await Notifications.getAllScheduledNotificationsAsync();

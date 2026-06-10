@@ -83,12 +83,20 @@ export default function Patients() {
       return;
     }
 
+    if (age) {
+      const ageNum = parseInt(age, 10);
+      if (isNaN(ageNum) || ageNum < 0 || ageNum > 150) {
+        Alert.alert(t('common.error'), t('patients.validAge'));
+        return;
+      }
+    }
+
     setLoading(true);
     try {
       if (editingPatient) {
         await api.put(`/patients/${editingPatient.id}`, {
           name,
-          age: age ? parseInt(age) : null,
+          age: age ? parseInt(age, 10) : null,
           notes,
           photo,
         });
@@ -96,7 +104,7 @@ export default function Patients() {
       } else {
         await api.post('/patients', {
           name,
-          age: age ? parseInt(age) : null,
+          age: age ? parseInt(age, 10) : null,
           notes,
           photo,
         });
@@ -219,8 +227,9 @@ export default function Patients() {
                   style={styles.input}
                   placeholder={t('patients.years')}
                   value={age}
-                  onChangeText={setAge}
+                  onChangeText={(t) => setAge(t.replace(/[^0-9]/g, ''))}
                   keyboardType="number-pad"
+                  maxLength={3}
                 />
               </View>
 

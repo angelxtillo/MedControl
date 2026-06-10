@@ -58,6 +58,7 @@ export default function Home() {
   const lastLoad = useRef(0);
   useEffect(() => {
     requestNotificationPermissions();
+    cleanOldDoseLogKeys();
   }, []);
 
   useFocusEffect(
@@ -65,6 +66,31 @@ export default function Home() {
       loadDashboard();
     }, [])
   );
+
+  const cleanOldDoseLogKeys = async () => {
+    try {
+      const keys = await AsyncStorage.getAllKeys();
+      const today = new Date().toISOString().slice(0, 10);
+      const doseKeys = keys.filter(k => k.startsWith('doseLogged:'));
+      for (const key of doseKeys) {
+        const parts = key.split(':');
+        if (parts.length >= 3 && parts[2] < today) {
+          await AsyncStorage.removeItem(key);
+        }
+      }
+    } catch (_) {}
+  };
+
+  const markDoseLogged = async (medicationId: string, scheduledTime: string) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const timeOnly = scheduledTime.includes('T')
+      ? scheduledTime.split('T')[1].slice(0, 5)
+      : scheduledTime.slice(0, 5);
+    const key = `doseLogged:${medicationId}:${today}:${timeOnly}`;
+    try {
+      await AsyncStorage.setItem(key, '1');
+    } catch (_) {}
+  };
 
   const reconcileNotifications = async () => {
     const RECONCILE_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -187,6 +213,7 @@ export default function Home() {
           taken_datetime: new Date().toISOString(),
         });
       }
+      await markDoseLogged(medicationId, scheduledDatetime);
       loadDashboard();
       Alert.alert(t('common.success'), t('home.successTaken'));
     } catch (error) {
@@ -208,6 +235,7 @@ export default function Home() {
           status: 'skipped',
         });
       }
+      await markDoseLogged(medicationId, scheduledDatetime);
       loadDashboard();
       Alert.alert(t('common.success'), t('home.successSkipped'));
     } catch (error) {
@@ -221,18 +249,10 @@ export default function Home() {
   };
 
   const getVisibleMedications = (medications: any[]): any[] => {
-    const groups: Record<string, any[]> = {};
-    for (const med of medications) {
-      if (!groups[med.medication_id]) groups[med.medication_id] = [];
-      groups[med.medication_id].push(med);
-    }
-    const result: any[] = [];
-    for (const group of Object.values(groups)) {
-      const pending = group.filter(m => m.status === 'pending');
-      result.push(pending.length > 0 ? pending[0] : group[group.length - 1]);
-    }
-    result.sort((a, b) => a.scheduled_time.localeCompare(b.scheduled_time));
-    return result;
+    // Solo mostrar dosis con status === 'pending' (las demás van a Historial)
+    const pending = medications.filter(m => m.status === 'pending');
+    pending.sort((a, b) => a.scheduled_time.localeCompare(b.scheduled_time));
+    return pending;
   };
 
   const groupByPatient = (medications: any[]): Record<string, any[]> => {
@@ -357,8 +377,8 @@ export default function Home() {
           <ActivityIndicator size="large" color="#2196F3" style={{ marginTop: 48 }} />
         ) : visibleMeds.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Ionicons name="checkmark-circle-outline" size={64} color="#ccc" />
-            <Text style={styles.emptyText}>{t('home.noMedicationsToday')}</Text>
+            <Ionicons name="checkmark-circle" size={64} color="#4CAF50" />
+            <Text style={styles.emptyText}>{t('home.allCaughtUp')}</Text>
           </View>
         ) : (
           Object.entries(patientGroups).map(([patientName, meds]) => (

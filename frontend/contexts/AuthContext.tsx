@@ -11,11 +11,18 @@ interface User {
   email: string;
 }
 
+interface RegisterResult {
+  requiresVerification: boolean;
+  email?: string;
+}
+
 interface AuthContextType {
   user: User | null;
   token: string | null;
   login: (email: string, password: string) => Promise<void>;
-  register: (name: string, email: string, password: string) => Promise<void>;
+  register: (name: string, email: string, password: string) => Promise<RegisterResult>;
+  verifyEmail: (email: string, code: string) => Promise<void>;
+  resendVerification: (email: string) => Promise<void>;
   logout: () => Promise<void>;
   deleteAccount: (password: string) => Promise<void>;
   loading: boolean;
@@ -78,12 +85,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const register = async (name: string, email: string, password: string) => {
+  const register = async (name: string, email: string, password: string): Promise<RegisterResult> => {
     try {
+      const normalizedEmail = email.trim().toLowerCase();
       const response = await axios.post(`${API_URL}/api/auth/register`, {
         name,
-        email,
+        email: normalizedEmail,
         password,
+      }, { timeout: 60000 });
+
+      if (response.data.requires_verification) {
+        return { requiresVerification: true, email: normalizedEmail };
+      }
+
+      const { token: newToken, user: newUser } = response.data;
+      await AsyncStorage.setItem('token', newToken);
+      await AsyncStorage.setItem('user', JSON.stringify(newUser));
+      setToken(newToken);
+      setUser(newUser);
+      return { requiresVerification: false };
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || 'Error al registrarse');
+    }
+  };
+
+  const verifyEmail = async (email: string, code: string) => {
+    try {
+      const response = await axios.post(`${API_URL}/api/auth/verify-email`, {
+        email: email.trim().toLowerCase(),
+        code: code.trim().toUpperCase(),
       }, { timeout: 60000 });
       const { token: newToken, user: newUser } = response.data;
       await AsyncStorage.setItem('token', newToken);
@@ -91,7 +121,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setToken(newToken);
       setUser(newUser);
     } catch (error: any) {
-      throw new Error(error.response?.data?.detail || 'Error al registrarse');
+      throw new Error(error.response?.data?.detail || 'Código inválido');
+    }
+  };
+
+  const resendVerification = async (email: string) => {
+    try {
+      await axios.post(`${API_URL}/api/auth/resend-verification`, {
+        email: email.trim().toLowerCase(),
+      }, { timeout: 60000 });
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || 'No se pudo reenviar el código');
     }
   };
 
@@ -124,7 +164,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, login, register, logout, deleteAccount, loading }}>
+    <AuthContext.Provider value={{ user, token, login, register, verifyEmail, resendVerification, logout, deleteAccount, loading }}>
       {children}
     </AuthContext.Provider>
   );

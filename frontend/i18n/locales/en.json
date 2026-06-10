@@ -40,7 +40,18 @@
     "processing": "Processing...",
     "namePlaceholder": "Full name",
     "emailPlaceholder": "Email",
-    "passwordPlaceholder": "Password"
+    "passwordPlaceholder": "Password",
+    "invalidEmail": "Enter a valid email address",
+    "invalidCode": "Enter the 6-character code",
+    "passwordHint": "Minimum 8 characters, including letter and number",
+    "verifyEmailTitle": "Verify your email",
+    "verifyEmailSubtitle": "Enter the code we sent",
+    "verifyEmailInfo": "We sent a 6-digit code to {{email}}. If you don't see it, check your spam folder.",
+    "verifyButton": "Verify",
+    "resendCode": "Resend code",
+    "resendIn": "Resend in {{seconds}}s",
+    "codeSent": "Code sent. Check your email.",
+    "backToLogin": "← Back to login"
   },
   "onboarding": {
     "slide1Title": "Organize medications",
@@ -97,7 +108,8 @@
     "skippedNoTime": "Skipped",
     "scheduled": "Scheduled: {{time}}",
     "pending": "Pending",
-    "missed": "Missed"
+    "missed": "Missed",
+    "allCaughtUp": "All caught up for today"
   },
   "patients": {
     "title": "Patients",

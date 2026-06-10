@@ -393,10 +393,11 @@ export default function PatientDetail() {
                 <TextInput
                   style={styles.input}
                   value={editAge}
-                  onChangeText={setEditAge}
+                  onChangeText={(t) => setEditAge(t.replace(/[^0-9]/g, ''))}
                   placeholder={t('patients.years')}
                   placeholderTextColor="#999"
-                  keyboardType="numeric"
+                  keyboardType="number-pad"
+                  maxLength={3}
                 />
               </View>
 

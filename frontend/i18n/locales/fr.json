@@ -40,7 +40,18 @@
     "processing": "Traitement en cours...",
     "namePlaceholder": "Nom complet",
     "emailPlaceholder": "E-mail",
-    "passwordPlaceholder": "Mot de passe"
+    "passwordPlaceholder": "Mot de passe",
+    "invalidEmail": "Entrez une adresse e-mail valide",
+    "invalidCode": "Entrez le code à 6 caractères",
+    "passwordHint": "Minimum 8 caractères, incluant lettre et chiffre",
+    "verifyEmailTitle": "Vérifiez votre e-mail",
+    "verifyEmailSubtitle": "Entrez le code que nous avons envoyé",
+    "verifyEmailInfo": "Nous avons envoyé un code à 6 chiffres à {{email}}. Si vous ne le voyez pas, vérifiez votre dossier spam.",
+    "verifyButton": "Vérifier",
+    "resendCode": "Renvoyer le code",
+    "resendIn": "Renvoyer dans {{seconds}}s",
+    "codeSent": "Code envoyé. Vérifiez votre e-mail.",
+    "backToLogin": "← Retour à la connexion"
   },
   "onboarding": {
     "slide1Title": "Organisez les médicaments",
@@ -97,7 +108,8 @@
     "skippedNoTime": "Sauté",
     "scheduled": "Prévu : {{time}}",
     "pending": "En attente",
-    "missed": "Manqués"
+    "missed": "Manqués",
+    "allCaughtUp": "Tout est à jour pour aujourd'hui"
   },
   "patients": {
     "title": "Patients",

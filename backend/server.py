@@ -5,10 +5,12 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
+import re
 from pathlib import Path
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, EmailStr, field_validator
 from typing import List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from contextlib import asynccontextmanager
 
 MISSED_GRACE_MINUTES = 30  # margen antes de marcar una dosis como "perdida"
 from passlib.context import CryptContext
@@ -24,6 +26,11 @@ import string
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
+# JWT_SECRET sin fallback — error explícito si no está configurado
+JWT_SECRET = os.environ.get('JWT_SECRET')
+if not JWT_SECRET:
+    raise RuntimeError("JWT_SECRET environment variable is required")
+
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
@@ -32,7 +39,6 @@ db = client[os.environ['DB_NAME']]
 # Security
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security = HTTPBearer()
-JWT_SECRET = os.environ.get('JWT_SECRET', 'your-secret-key')
 ALGORITHM = "HS256"
 SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY", "")
 SENDGRID_FROM_EMAIL = os.environ.get("SENDGRID_FROM_EMAIL", "")
@@ -42,32 +48,107 @@ rate_limit_store = defaultdict(list)
 RATE_LIMIT_REQUESTS = 100  # requests per window
 RATE_LIMIT_WINDOW = 60  # seconds
 
-def check_rate_limit(ip: str) -> bool:
-    """Simple rate limiting by IP"""
+# Rate limiting específico para auth
+auth_rate_limit_store = defaultdict(list)
+AUTH_RATE_LIMIT_REQUESTS = 5  # intentos de login/register
+AUTH_RATE_LIMIT_WINDOW = 900  # 15 minutos
+
+# Rate limiting para resend/invite (3 por hora por usuario)
+user_action_rate_limit_store = defaultdict(list)
+USER_ACTION_RATE_LIMIT = 3
+USER_ACTION_WINDOW = 3600  # 1 hora
+
+def get_client_ip(request: Request) -> str:
+    """Obtener IP real del cliente considerando proxies (Render)"""
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+def check_rate_limit(ip: str, limit: int = RATE_LIMIT_REQUESTS, window: int = RATE_LIMIT_WINDOW) -> bool:
+    """Rate limiting genérico por IP"""
     now = time.time()
-    # Clean old entries
-    rate_limit_store[ip] = [t for t in rate_limit_store[ip] if now - t < RATE_LIMIT_WINDOW]
-    if len(rate_limit_store[ip]) >= RATE_LIMIT_REQUESTS:
+    rate_limit_store[ip] = [t for t in rate_limit_store[ip] if now - t < window]
+    if len(rate_limit_store[ip]) >= limit:
         return False
     rate_limit_store[ip].append(now)
     return True
+
+def check_auth_rate_limit(ip: str) -> bool:
+    """Rate limiting estricto para auth endpoints (5 por 15 min)"""
+    now = time.time()
+    auth_rate_limit_store[ip] = [t for t in auth_rate_limit_store[ip] if now - t < AUTH_RATE_LIMIT_WINDOW]
+    if len(auth_rate_limit_store[ip]) >= AUTH_RATE_LIMIT_REQUESTS:
+        return False
+    auth_rate_limit_store[ip].append(now)
+    return True
+
+def check_user_action_rate_limit(user_id: str, action: str) -> bool:
+    """Rate limiting por usuario para acciones sensibles (3 por hora)"""
+    key = f"{user_id}:{action}"
+    now = time.time()
+    user_action_rate_limit_store[key] = [t for t in user_action_rate_limit_store[key] if now - t < USER_ACTION_WINDOW]
+    if len(user_action_rate_limit_store[key]) >= USER_ACTION_RATE_LIMIT:
+        return False
+    user_action_rate_limit_store[key].append(now)
+    return True
+
+# Lifespan handler para inicialización y cierre
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: crear índices
+    try:
+        # Índice único en caregivers.email
+        await db.caregivers.create_index("email", unique=True)
+        # Índices compuestos para rendimiento
+        await db.medication_logs.create_index([("patient_id", 1), ("scheduled_datetime", -1)])
+        await db.medications.create_index("patient_id")
+        # TTL para verificaciones de email (15 min)
+        await db.email_verifications.create_index("expires_at", expireAfterSeconds=0)
+        # TTL para invitaciones (48 horas)
+        await db.invitations.create_index("expires_at", expireAfterSeconds=0)
+        logging.info("MongoDB indexes created successfully")
+    except Exception as e:
+        logging.warning(f"Index creation warning: {e}")
+    yield
+    # Shutdown
+    client.close()
 
 # Create the main app
 app = FastAPI(
     title="MedControl API",
     description="API para gestión de medicamentos y pacientes",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 api_router = APIRouter(prefix="/api")
 
+# ============= PASSWORD VALIDATION =============
+def validate_password(password: str) -> str:
+    """Validar política de contraseñas: 8-72 chars, al menos 1 letra y 1 número"""
+    if len(password) < 8:
+        raise ValueError("La contraseña debe tener al menos 8 caracteres")
+    if len(password) > 72:
+        raise ValueError("La contraseña no puede exceder 72 caracteres")
+    if not re.search(r'[a-zA-Z]', password):
+        raise ValueError("La contraseña debe contener al menos una letra")
+    if not re.search(r'[0-9]', password):
+        raise ValueError("La contraseña debe contener al menos un número")
+    return password
+
 # ============= MODELS =============
 class CaregiverCreate(BaseModel):
-    name: str
-    email: str
+    name: str = Field(..., min_length=1, max_length=100)
+    email: EmailStr
     password: str
 
+    @field_validator('password')
+    @classmethod
+    def password_policy(cls, v):
+        return validate_password(v)
+
 class CaregiverLogin(BaseModel):
-    email: str
+    email: EmailStr
     password: str
 
 class DeleteAccountRequest(BaseModel):
@@ -80,16 +161,16 @@ class Caregiver(BaseModel):
     created_at: datetime
 
 class PatientCreate(BaseModel):
-    name: str
-    age: Optional[int] = None
-    photo: Optional[str] = None  # base64
-    notes: Optional[str] = None
+    name: str = Field(..., min_length=1, max_length=100)
+    age: Optional[int] = Field(None, ge=0, le=150)
+    photo: Optional[str] = Field(None, max_length=2_800_000)  # ~2 MB base64
+    notes: Optional[str] = Field(None, max_length=1000)
 
 class PatientUpdate(BaseModel):
-    name: Optional[str] = None
-    age: Optional[int] = None
-    photo: Optional[str] = None
-    notes: Optional[str] = None
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
+    age: Optional[int] = Field(None, ge=0, le=150)
+    photo: Optional[str] = Field(None, max_length=2_800_000)
+    notes: Optional[str] = Field(None, max_length=1000)
 
 class Patient(BaseModel):
     id: str
@@ -124,29 +205,52 @@ class CaregiverInfo(BaseModel):
     is_owner: bool = False
     created_at: datetime
 
+# Validador de formato HH:MM
+TIME_PATTERN = re.compile(r'^([01]?[0-9]|2[0-3]):[0-5][0-9]$')
+
+def validate_schedule_times(times: List[str]) -> List[str]:
+    if len(times) > 12:
+        raise ValueError("No se pueden programar más de 12 horarios por medicamento")
+    for t in times:
+        if not TIME_PATTERN.match(t):
+            raise ValueError(f"Formato de hora inválido: {t}. Use HH:MM")
+    return times
+
 class MedicationCreate(BaseModel):
     patient_id: str
-    name: str
-    dosage: str
+    name: str = Field(..., max_length=200)
+    dosage: str = Field(..., max_length=200)
     frequency: str  # daily, twice_daily, etc.
-    schedule_times: List[str]  # ["08:00", "20:00"]
+    schedule_times: List[str] = Field(..., max_length=12)
     start_date: str
     end_date: Optional[str] = None
-    instructions: Optional[str] = None
+    instructions: Optional[str] = Field(None, max_length=1000)
     refill_alert_days: Optional[int] = 7
     active: bool = True
     notifications_enabled: bool = True
 
+    @field_validator('schedule_times')
+    @classmethod
+    def validate_times(cls, v):
+        return validate_schedule_times(v)
+
 class MedicationUpdate(BaseModel):
-    name: Optional[str] = None
-    dosage: Optional[str] = None
+    name: Optional[str] = Field(None, max_length=200)
+    dosage: Optional[str] = Field(None, max_length=200)
     frequency: Optional[str] = None
-    schedule_times: Optional[List[str]] = None
+    schedule_times: Optional[List[str]] = Field(None, max_length=12)
     end_date: Optional[str] = None
-    instructions: Optional[str] = None
+    instructions: Optional[str] = Field(None, max_length=1000)
     refill_alert_days: Optional[int] = None
     active: Optional[bool] = None
     notifications_enabled: Optional[bool] = None
+
+    @field_validator('schedule_times')
+    @classmethod
+    def validate_times(cls, v):
+        if v is not None:
+            return validate_schedule_times(v)
+        return v
 
 class Medication(BaseModel):
     id: str
@@ -195,6 +299,14 @@ class DashboardResponse(BaseModel):
     pending: int
     missed: int
 
+# Modelos para verificación de email
+class VerifyEmailRequest(BaseModel):
+    email: EmailStr
+    code: str
+
+class ResendVerificationRequest(BaseModel):
+    email: EmailStr
+
 # ============= HELPERS =============
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
@@ -204,10 +316,14 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def create_access_token(data: dict):
     to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(days=30)
+    expire = datetime.now(timezone.utc) + timedelta(days=30)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, JWT_SECRET, algorithm=ALGORITHM)
     return encoded_jwt
+
+def normalize_email(email: str) -> str:
+    """Normalizar email: strip + lowercase"""
+    return email.strip().lower()
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     try:
@@ -298,43 +414,206 @@ async def send_invitation_email(
         print(f"SendGrid error: {e}")
         return False
 
+async def send_verification_email(to_email: str, code: str) -> bool:
+    """Enviar código de verificación de email"""
+    try:
+        sg = sendgrid.SendGridAPIClient(api_key=SENDGRID_API_KEY)
+        html_content = f"""
+        <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px;">
+          <div style="background: #2196F3; padding: 20px; border-radius: 12px 12px 0 0; text-align: center;">
+            <h1 style="color: white; margin: 0;">&#128138; MedControl</h1>
+          </div>
+          <div style="background: #f9f9f9; padding: 24px; border-radius: 0 0 12px 12px;">
+            <h2 style="color: #212121;">Verifica tu correo electrónico</h2>
+            <p style="color: #666;">
+              Gracias por registrarte en MedControl. Para completar tu registro,
+              ingresa el siguiente código en la aplicación:
+            </p>
+            <div style="background: #E3F2FD; border: 2px dashed #2196F3; border-radius: 12px; padding: 20px; text-align: center; margin: 20px 0;">
+              <p style="color: #666; margin: 0 0 8px 0; font-size: 14px;">Tu código de verificación</p>
+              <h1 style="color: #1565C0; margin: 0; font-size: 36px; letter-spacing: 8px;">{code}</h1>
+            </div>
+            <p style="color: #999; font-size: 12px; text-align: center;">Este código expira en 15 minutos.</p>
+            <p style="color: #999; font-size: 12px; text-align: center;">Si no solicitaste este código, puedes ignorar este email.</p>
+          </div>
+        </div>
+        """
+        message = Mail(
+            from_email=SENDGRID_FROM_EMAIL,
+            to_emails=to_email,
+            subject="MedControl: Verifica tu correo electrónico",
+            html_content=html_content
+        )
+        response = sg.send(message)
+        return response.status_code in [200, 202]
+    except Exception as e:
+        print(f"SendGrid verification email error: {e}")
+        return False
+
 # ============= AUTH ENDPOINTS =============
 @api_router.post("/auth/register")
-async def register(caregiver: CaregiverCreate):
+async def register(caregiver: CaregiverCreate, request: Request):
+    ip = get_client_ip(request)
+    if not check_auth_rate_limit(ip):
+        raise HTTPException(status_code=429, detail="Demasiados intentos. Espera 15 minutos.")
+
+    email = normalize_email(caregiver.email)
+
     # Check if user exists
-    existing = await db.caregivers.find_one({"email": caregiver.email})
+    existing = await db.caregivers.find_one({"email": email})
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
-    
-    # Create user
+
+    # Create user with email_verified=False
     user_dict = {
         "name": caregiver.name,
-        "email": caregiver.email,
+        "email": email,
         "password_hash": hash_password(caregiver.password),
-        "created_at": datetime.utcnow()
+        "email_verified": False,
+        "created_at": datetime.now(timezone.utc)
     }
     result = await db.caregivers.insert_one(user_dict)
-    
-    # Create token
-    token = create_access_token({"sub": str(result.inserted_id)})
-    
+
+    # Generate verification code
+    code = generate_invitation_code()
+    await db.email_verifications.insert_one({
+        "email": email,
+        "code": code,
+        "attempts": 0,
+        "created_at": datetime.now(timezone.utc),
+        "expires_at": datetime.now(timezone.utc) + timedelta(minutes=15)
+    })
+
+    # Send verification email
+    await send_verification_email(email, code)
+
+    return {
+        "message": "Registro exitoso. Revisa tu correo para verificar tu cuenta.",
+        "email": email,
+        "requires_verification": True
+    }
+
+@api_router.post("/auth/verify-email")
+async def verify_email(data: VerifyEmailRequest, request: Request):
+    ip = get_client_ip(request)
+    if not check_auth_rate_limit(ip):
+        raise HTTPException(status_code=429, detail="Demasiados intentos. Espera 15 minutos.")
+
+    email = normalize_email(data.email)
+    code = data.code.strip().upper()
+
+    verification = await db.email_verifications.find_one({
+        "email": email,
+        "code": code
+    })
+
+    if not verification:
+        # Incrementar intentos fallidos
+        await db.email_verifications.update_one(
+            {"email": email},
+            {"$inc": {"attempts": 1}}
+        )
+        # Verificar si excedió intentos
+        current = await db.email_verifications.find_one({"email": email})
+        if current and current.get("attempts", 0) >= 5:
+            raise HTTPException(status_code=429, detail="Demasiados intentos fallidos. Solicita un nuevo código.")
+        raise HTTPException(status_code=400, detail="Código inválido")
+
+    if verification["expires_at"] < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="El código ha expirado. Solicita uno nuevo.")
+
+    if verification.get("attempts", 0) >= 5:
+        raise HTTPException(status_code=429, detail="Demasiados intentos fallidos. Solicita un nuevo código.")
+
+    # Marcar usuario como verificado
+    user = await db.caregivers.find_one({"email": email})
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    await db.caregivers.update_one(
+        {"_id": user["_id"]},
+        {"$set": {"email_verified": True}}
+    )
+
+    # Eliminar verificación usada
+    await db.email_verifications.delete_many({"email": email})
+
+    # Crear token
+    token = create_access_token({"sub": str(user["_id"])})
+
     return {
         "token": token,
         "user": {
-            "id": str(result.inserted_id),
-            "name": caregiver.name,
-            "email": caregiver.email
+            "id": str(user["_id"]),
+            "name": user["name"],
+            "email": user["email"]
         }
     }
 
+@api_router.post("/auth/resend-verification")
+async def resend_verification(data: ResendVerificationRequest, request: Request):
+    ip = get_client_ip(request)
+    if not check_auth_rate_limit(ip):
+        raise HTTPException(status_code=429, detail="Demasiados intentos. Espera 15 minutos.")
+
+    email = normalize_email(data.email)
+
+    # Rate limit por usuario (1 por minuto implícito, 3 por hora)
+    last_verification = await db.email_verifications.find_one(
+        {"email": email},
+        sort=[("created_at", -1)]
+    )
+
+    if last_verification:
+        time_since = datetime.now(timezone.utc) - last_verification["created_at"]
+        if time_since < timedelta(minutes=1):
+            raise HTTPException(status_code=429, detail="Espera 1 minuto antes de solicitar otro código.")
+
+    user = await db.caregivers.find_one({"email": email})
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    if user.get("email_verified", False):
+        raise HTTPException(status_code=400, detail="El email ya está verificado")
+
+    # Eliminar códigos anteriores
+    await db.email_verifications.delete_many({"email": email})
+
+    # Generar nuevo código
+    code = generate_invitation_code()
+    await db.email_verifications.insert_one({
+        "email": email,
+        "code": code,
+        "attempts": 0,
+        "created_at": datetime.now(timezone.utc),
+        "expires_at": datetime.now(timezone.utc) + timedelta(minutes=15)
+    })
+
+    await send_verification_email(email, code)
+
+    return {"message": "Código enviado. Revisa tu correo."}
+
 @api_router.post("/auth/login")
-async def login(credentials: CaregiverLogin):
-    user = await db.caregivers.find_one({"email": credentials.email})
+async def login(credentials: CaregiverLogin, request: Request):
+    ip = get_client_ip(request)
+    if not check_auth_rate_limit(ip):
+        raise HTTPException(status_code=429, detail="Demasiados intentos. Espera 15 minutos.")
+
+    email = normalize_email(credentials.email)
+    user = await db.caregivers.find_one({"email": email})
+
     if not user or not verify_password(credentials.password, user["password_hash"]):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    
+        raise HTTPException(status_code=401, detail="Credenciales inválidas")
+
+    # Verificar si el email está verificado
+    if not user.get("email_verified", False):
+        raise HTTPException(
+            status_code=403,
+            detail="Email no verificado. Revisa tu correo o solicita un nuevo código."
+        )
+
     token = create_access_token({"sub": str(user["_id"])})
-    
+
     return {
         "token": token,
         "user": {
@@ -399,7 +678,7 @@ async def create_patient(patient: PatientCreate, user_id: str = Depends(get_curr
         "notes": patient.notes,
         "caregiver_ids": [user_id],
         "created_by": user_id,  # Track who created the patient
-        "created_at": datetime.utcnow()
+        "created_at": datetime.now(timezone.utc)
     }
     result = await db.patients.insert_one(patient_dict)
     return {
@@ -485,48 +764,6 @@ async def get_patient_caregivers(patient_id: str, user_id: str = Depends(get_cur
             })
     
     return caregivers
-
-@api_router.post("/patients/{patient_id}/caregivers/invite")
-async def invite_caregiver(
-    patient_id: str,
-    invite: InviteCaregiverRequest,
-    user_id: str = Depends(get_current_user)
-):
-    """Invite a caregiver to a patient by email"""
-    # Verify current user has access to patient
-    patient = await db.patients.find_one({
-        "_id": ObjectId(patient_id),
-        "caregiver_ids": user_id
-    })
-    if not patient:
-        raise HTTPException(status_code=404, detail="Patient not found")
-    
-    # Find caregiver by email
-    new_caregiver = await db.caregivers.find_one({"email": invite.email.lower()})
-    if not new_caregiver:
-        raise HTTPException(status_code=404, detail="No se encontró un cuidador con ese email. Debe registrarse primero.")
-    
-    new_caregiver_id = str(new_caregiver["_id"])
-    
-    # Check if already a caregiver
-    if new_caregiver_id in patient.get("caregiver_ids", []):
-        raise HTTPException(status_code=400, detail="Este cuidador ya tiene acceso al paciente")
-    
-    # Add caregiver
-    await db.patients.update_one(
-        {"_id": ObjectId(patient_id)},
-        {"$addToSet": {"caregiver_ids": new_caregiver_id}}
-    )
-    
-    return {
-        "message": "Cuidador agregado exitosamente",
-        "caregiver": {
-            "id": new_caregiver_id,
-            "name": new_caregiver["name"],
-            "email": new_caregiver["email"],
-            "is_owner": False
-        }
-    }
 
 @api_router.delete("/patients/{patient_id}/caregivers/{caregiver_id}")
 async def remove_caregiver(
@@ -645,7 +882,7 @@ async def create_medication(medication: MedicationCreate, user_id: str = Depends
     
     med_dict = medication.dict()
     med_dict["schedule_times"] = normalized_times
-    med_dict["created_at"] = datetime.utcnow()
+    med_dict["created_at"] = datetime.now(timezone.utc)
     
     result = await db.medications.insert_one(med_dict)
     return {
@@ -675,7 +912,7 @@ async def update_medication(
     
     update_data = {k: v for k, v in medication.dict().items() if v is not None}
     if update_data:
-        update_data["updated_at"] = datetime.utcnow()
+        update_data["updated_at"] = datetime.now(timezone.utc)
         await db.medications.update_one(
             {"_id": ObjectId(medication_id)},
             {"$set": update_data}
@@ -750,7 +987,7 @@ async def get_logs(
         ]
 
     # --- include_missed=True: enrich with synthetic missed logs ---
-    now_local = datetime.utcnow() + timedelta(minutes=timezone_offset)
+    now_local = datetime.now(timezone.utc) + timedelta(minutes=timezone_offset)
     thirty_days_ago = (now_local - timedelta(days=30)).date().isoformat()
 
     real_logs = await db.medication_logs.find({
@@ -866,10 +1103,10 @@ async def create_log(log: MedicationLogCreate, user_id: str = Depends(get_curren
     
     log_dict = {
         **log.dict(),
-        "created_at": datetime.utcnow()
+        "created_at": datetime.now(timezone.utc)
     }
     if log.status == "taken" and not log_dict.get("taken_datetime"):
-        log_dict["taken_datetime"] = datetime.utcnow().isoformat()
+        log_dict["taken_datetime"] = datetime.now(timezone.utc).isoformat()
     result = await db.medication_logs.insert_one(log_dict)
     return {
         "id": str(result.inserted_id),
@@ -896,7 +1133,7 @@ async def update_log(
     
     update_data = log.dict()
     if not update_data.get("taken_datetime") and log.status == "taken":
-        update_data["taken_datetime"] = datetime.utcnow().isoformat()
+        update_data["taken_datetime"] = datetime.now(timezone.utc).isoformat()
     
     await db.medication_logs.update_one(
         {"_id": ObjectId(log_id)},
@@ -918,7 +1155,7 @@ async def update_log(
 # ============= DASHBOARD ENDPOINT =============
 @api_router.get("/dashboard/today")
 async def get_today_dashboard(user_id: str = Depends(get_current_user), timezone_offset: int = 0):
-    now_local = datetime.utcnow() + timedelta(minutes=timezone_offset)
+    now_local = datetime.now(timezone.utc) + timedelta(minutes=timezone_offset)
     today_str = now_local.date().isoformat()
     weekday_local = now_local.weekday()  # 0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri, 5=Sat, 6=Sun
 
@@ -1042,7 +1279,7 @@ async def get_upcoming_dashboard(
     timezone_offset: int = 0,
     user_id: str = Depends(get_current_user)
 ):
-    now_local = datetime.utcnow() + timedelta(minutes=timezone_offset)
+    now_local = datetime.now(timezone.utc) + timedelta(minutes=timezone_offset)
 
     DAYS_ES = {
         0: "Lunes", 1: "Martes", 2: "Miércoles",
@@ -1128,6 +1365,10 @@ async def invite_caregiver_by_code(
     user_id: str = Depends(get_current_user)
 ):
     """Send invitation email with a 6-digit code"""
+    # Rate limit: 3 invitaciones por hora por usuario
+    if not check_user_action_rate_limit(user_id, "invite"):
+        raise HTTPException(status_code=429, detail="Límite de invitaciones alcanzado. Espera 1 hora.")
+
     # Verify the inviter has access to the patient
     patient = await db.patients.find_one({
         "_id": ObjectId(invitation.patient_id),
@@ -1140,7 +1381,7 @@ async def invite_caregiver_by_code(
     if not inviter:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
-    invitee_email = invitation.invitee_email.strip().lower()
+    invitee_email = normalize_email(invitation.invitee_email)
 
     # Cannot invite yourself
     if invitee_email == inviter["email"].lower():
@@ -1153,7 +1394,7 @@ async def invite_caregiver_by_code(
         if existing_id in patient.get("caregiver_ids", []):
             raise HTTPException(status_code=400, detail="Este usuario ya es cuidador de este paciente")
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     # Check for existing pending invitation (reuse code if still valid)
     existing_invitation = await db.invitations.find_one({
@@ -1210,7 +1451,7 @@ async def accept_invitation(
     if not invitation:
         raise HTTPException(status_code=404, detail="Código inválido. Verifica el código e inténtalo de nuevo.")
 
-    if invitation["expires_at"] < datetime.utcnow():
+    if invitation["expires_at"] < datetime.now(timezone.utc):
         await db.invitations.update_one(
             {"_id": invitation["_id"]},
             {"$set": {"status": "expired"}}
@@ -1278,7 +1519,7 @@ async def health_check():
         "status": "healthy",
         "version": "1.0.0",
         "database": db_status,
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": datetime.now(timezone.utc).isoformat()
     }
 
 # Include the router
@@ -1286,7 +1527,7 @@ app.include_router(api_router)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_credentials=True,
+    allow_credentials=False,
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
@@ -1299,6 +1540,15 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    client.close()
+# Middleware de rate limiting global
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    ip = get_client_ip(request)
+    if not check_rate_limit(ip):
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=429,
+            content={"detail": "Demasiadas solicitudes. Espera un momento."}
+        )
+    response = await call_next(request)
+    return response

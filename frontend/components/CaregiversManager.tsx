@@ -41,7 +41,6 @@ export default function CaregiversManager({
   const [modalVisible, setModalVisible] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviting, setInviting] = useState(false);
-  const [directMode, setDirectMode] = useState(false);
 
   useEffect(() => {
     loadCaregivers();
@@ -75,34 +74,8 @@ export default function CaregiversManager({
       );
       setInviteEmail('');
       setModalVisible(false);
-      setDirectMode(false);
     } catch (error: any) {
       const message = error.response?.data?.detail || 'No se pudo enviar la invitación';
-      Alert.alert(t('common.error'), message);
-    } finally {
-      setInviting(false);
-    }
-  };
-
-  const handleDirectAdd = async () => {
-    if (!inviteEmail.trim()) {
-      Alert.alert(t('common.error'), t('caregivers.emailRequired'));
-      return;
-    }
-    setInviting(true);
-    try {
-      await api.post(`/patients/${patientId}/caregivers/invite`, {
-        patient_id: patientId,
-        email: inviteEmail.trim().toLowerCase(),
-      });
-      Alert.alert(t('common.success'), t('caregivers.caregiverAdded'));
-      setInviteEmail('');
-      setModalVisible(false);
-      setDirectMode(false);
-      loadCaregivers();
-      onCaregiversChange?.();
-    } catch (error: any) {
-      const message = error.response?.data?.detail || t('caregivers.notFound');
       Alert.alert(t('common.error'), message);
     } finally {
       setInviting(false);
@@ -204,7 +177,7 @@ export default function CaregiversManager({
         visible={modalVisible}
         animationType="slide"
         transparent={true}
-        onRequestClose={() => { setModalVisible(false); setDirectMode(false); setInviteEmail(''); }}
+        onRequestClose={() => { setModalVisible(false); setInviteEmail(''); }}
       >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -214,7 +187,7 @@ export default function CaregiversManager({
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{t('caregivers.inviteByEmail')}</Text>
               <TouchableOpacity
-                onPress={() => { setModalVisible(false); setDirectMode(false); setInviteEmail(''); }}
+                onPress={() => { setModalVisible(false); setInviteEmail(''); }}
                 style={styles.closeButton}
               >
                 <Ionicons name="close" size={24} color="#666" />
@@ -222,90 +195,49 @@ export default function CaregiversManager({
             </View>
 
             <ScrollView style={styles.modalBody} keyboardShouldPersistTaps="handled">
-              {!directMode ? (
-                <>
-                  <Text style={styles.modalDescription}>
-                    {t('caregivers.inviteDescription')}
-                  </Text>
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>{t('caregivers.inviteEmailLabel')}</Text>
-                    <TextInput
-                      style={styles.input}
-                      value={inviteEmail}
-                      onChangeText={setInviteEmail}
-                      placeholder="ejemplo@correo.com"
-                      placeholderTextColor="#999"
-                      keyboardType="email-address"
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                    />
-                  </View>
-                  <View style={styles.infoBox}>
-                    <Ionicons name="mail" size={20} color="#2196F3" />
-                    <Text style={styles.infoText}>
-                      {t('caregivers.inviteDescription')}
-                    </Text>
-                  </View>
-                  <TouchableOpacity
-                    style={styles.directModeLink}
-                    onPress={() => setDirectMode(true)}
-                  >
-                    <Text style={styles.directModeLinkText}>{t('caregivers.directMode')} →</Text>
-                  </TouchableOpacity>
-                </>
-              ) : (
-                <>
-                  <Text style={styles.modalDescription}>
-                    {t('caregivers.inviteEmailLabel')}
-                  </Text>
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>{t('caregivers.inviteEmailLabel')}</Text>
-                    <TextInput
-                      style={styles.input}
-                      value={inviteEmail}
-                      onChangeText={setInviteEmail}
-                      placeholder="ejemplo@correo.com"
-                      placeholderTextColor="#999"
-                      keyboardType="email-address"
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                    />
-                  </View>
-                  <View style={styles.infoBox}>
-                    <Ionicons name="information-circle" size={20} color="#2196F3" />
-                    <Text style={styles.infoText}>
-                      {t('caregivers.accessInfo', { patient: patientName })}
-                    </Text>
-                  </View>
-                  <TouchableOpacity
-                    style={styles.directModeLink}
-                    onPress={() => setDirectMode(false)}
-                  >
-                    <Text style={styles.directModeLinkText}>{t('caregivers.inviteMode')}</Text>
-                  </TouchableOpacity>
-                </>
-              )}
+              <Text style={styles.modalDescription}>
+                {t('caregivers.inviteDescription')}
+              </Text>
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>{t('caregivers.inviteEmailLabel')}</Text>
+                <TextInput
+                  style={styles.input}
+                  value={inviteEmail}
+                  onChangeText={setInviteEmail}
+                  placeholder="ejemplo@correo.com"
+                  placeholderTextColor="#999"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+              </View>
+              <View style={styles.infoBox}>
+                <Ionicons name="mail" size={20} color="#2196F3" />
+                <Text style={styles.infoText}>
+                  {t('caregivers.inviteDescription')}
+                </Text>
+              </View>
             </ScrollView>
 
             <View style={styles.modalFooter}>
               <TouchableOpacity
                 style={styles.cancelButton}
-                onPress={() => { setModalVisible(false); setDirectMode(false); setInviteEmail(''); }}
+                onPress={() => { setModalVisible(false); setInviteEmail(''); }}
               >
                 <Text style={styles.cancelButtonText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.inviteButton, inviting && styles.inviteButtonDisabled]}
-                onPress={directMode ? handleDirectAdd : handleSendInvitation}
+                onPress={handleSendInvitation}
                 disabled={inviting}
               >
                 {inviting ? (
                   <ActivityIndicator size="small" color="white" />
                 ) : (
                   <>
-                    <Ionicons name={directMode ? 'person-add' : 'mail'} size={18} color="white" />
+                    <Ionicons name="mail" size={18} color="white" />
                     <Text style={styles.inviteButtonText}>
-                      {directMode ? t('common.add') : t('caregivers.inviteSend')}
+                      {t('caregivers.inviteSend')}
                     </Text>
                   </>
                 )}
@@ -500,14 +432,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: 'white',
-  },
-  directModeLink: {
-    marginTop: 12,
-    alignItems: 'center',
-  },
-  directModeLinkText: {
-    fontSize: 13,
-    color: '#2196F3',
-    fontWeight: '500',
   },
 });
