@@ -55,6 +55,7 @@ export default function Home() {
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [retrying, setRetrying] = useState(false);
+  const [processingKeys, setProcessingKeys] = useState<Set<string>>(new Set());
   const lastLoad = useRef(0);
   useEffect(() => {
     requestNotificationPermissions();
@@ -198,6 +199,25 @@ export default function Home() {
   };
 
   const handleMarkTaken = async (medicationId: string, patientId: string, scheduledDatetime: string, logId: string | null) => {
+    const key = `${medicationId}:${scheduledDatetime}`;
+    if (processingKeys.has(key)) return;
+
+    // Guardar estado anterior para rollback
+    const prevDashboard = { ...dashboard };
+
+    // Actualización optimista
+    setProcessingKeys((prev) => new Set(prev).add(key));
+    setDashboard((prev) => ({
+      ...prev,
+      medications_today: prev.medications_today.map((m) =>
+        m.medication_id === medicationId && m.scheduled_datetime === scheduledDatetime
+          ? { ...m, status: 'taken' }
+          : m
+      ),
+      completed: prev.completed + 1,
+      pending: Math.max(0, prev.pending - 1),
+    }));
+
     try {
       if (logId) {
         await api.put(`/logs/${logId}`, {
@@ -214,14 +234,40 @@ export default function Home() {
         });
       }
       await markDoseLogged(medicationId, scheduledDatetime);
-      loadDashboard();
-      Alert.alert(t('common.success'), t('home.successTaken'));
+      // Refrescar en background saltando debounce
+      loadDashboard(true);
     } catch (error) {
+      // Rollback
+      setDashboard(prevDashboard);
       Alert.alert(t('common.error'), t('home.errorUpdateStatus'));
+    } finally {
+      setProcessingKeys((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
     }
   };
 
   const handleMarkSkipped = async (medicationId: string, patientId: string, scheduledDatetime: string, logId: string | null) => {
+    const key = `${medicationId}:${scheduledDatetime}`;
+    if (processingKeys.has(key)) return;
+
+    // Guardar estado anterior para rollback
+    const prevDashboard = { ...dashboard };
+
+    // Actualización optimista
+    setProcessingKeys((prev) => new Set(prev).add(key));
+    setDashboard((prev) => ({
+      ...prev,
+      medications_today: prev.medications_today.map((m) =>
+        m.medication_id === medicationId && m.scheduled_datetime === scheduledDatetime
+          ? { ...m, status: 'skipped' }
+          : m
+      ),
+      pending: Math.max(0, prev.pending - 1),
+    }));
+
     try {
       if (logId) {
         await api.put(`/logs/${logId}`, {
@@ -236,10 +282,18 @@ export default function Home() {
         });
       }
       await markDoseLogged(medicationId, scheduledDatetime);
-      loadDashboard();
-      Alert.alert(t('common.success'), t('home.successSkipped'));
+      // Refrescar en background saltando debounce
+      loadDashboard(true);
     } catch (error) {
+      // Rollback
+      setDashboard(prevDashboard);
       Alert.alert(t('common.error'), t('home.errorUpdateStatus'));
+    } finally {
+      setProcessingKeys((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
     }
   };
 
@@ -338,8 +392,43 @@ export default function Home() {
         }
       >
         {(() => {
-          const nextDose = dashboard.medications_today.find(m => m.status === 'pending');
+          const now = new Date();
+          const nowTimeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+
+          // Buscar próxima dosis pendiente con hora >= ahora
+          const pendingToday = dashboard.medications_today.filter(m => m.status === 'pending');
+          let nextDose = pendingToday.find(m => (m.scheduled_time || '') >= nowTimeStr);
+
+          // Si no hay futuras hoy, mostrar la primera pendiente (dentro de gracia)
+          if (!nextDose && pendingToday.length > 0) {
+            nextDose = pendingToday[0];
+          }
+
+          // Si no hay pendientes hoy, buscar en mañana
+          if (!nextDose && upcomingDays.length > 0) {
+            const tomorrow = upcomingDays[0];
+            if (tomorrow.medications.length > 0) {
+              const firstTomorrow = tomorrow.medications[0];
+              return (
+                <View style={styles.nextDoseCard}>
+                  <View style={styles.nextDoseHeader}>
+                    <Ionicons name="time-outline" size={18} color="#2196F3" />
+                    <Text style={styles.nextDoseLabel}>{t('home.nextDoseTitle')}</Text>
+                  </View>
+                  <Text style={styles.nextDoseMed}>{firstTomorrow.medication_name}</Text>
+                  <Text style={styles.nextDoseTime}>
+                    {t('home.tomorrow')} {firstTomorrow.scheduled_time}
+                  </Text>
+                  {firstTomorrow.patient_name ? (
+                    <Text style={styles.nextDosePatient}>{firstTomorrow.patient_name}</Text>
+                  ) : null}
+                </View>
+              );
+            }
+          }
+
           if (!nextDose) return null;
+
           const timeUntil = getTimeUntil(nextDose.next_dose_time || nextDose.scheduled_time);
           return (
             <View style={styles.nextDoseCard}>
@@ -395,6 +484,7 @@ export default function Home() {
                   scheduledTime={med.scheduled_time}
                   patientName={med.patient_name}
                   status={med.status}
+                  disabled={processingKeys.has(`${med.medication_id}:${med.scheduled_datetime}`)}
                   onMarkTaken={() => handleMarkTaken(med.medication_id, med.patient_id, med.scheduled_datetime, med.log_id)}
                   onMarkSkipped={() => handleMarkSkipped(med.medication_id, med.patient_id, med.scheduled_datetime, med.log_id)}
                 />

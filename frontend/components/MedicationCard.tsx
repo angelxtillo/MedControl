@@ -11,6 +11,7 @@ interface MedicationCardProps {
   status: string;
   onMarkTaken: () => void;
   onMarkSkipped: () => void;
+  disabled?: boolean;
 }
 
 export const MedicationCard: React.FC<MedicationCardProps> = ({
@@ -21,6 +22,7 @@ export const MedicationCard: React.FC<MedicationCardProps> = ({
   status,
   onMarkTaken,
   onMarkSkipped,
+  disabled = false,
 }) => {
   const { t } = useTranslation();
 
@@ -83,11 +85,19 @@ export const MedicationCard: React.FC<MedicationCardProps> = ({
 
       {status === 'pending' && (
         <View style={styles.actionsContainer}>
-          <TouchableOpacity style={styles.takenButton} onPress={onMarkTaken}>
+          <TouchableOpacity
+            style={[styles.takenButton, disabled && styles.buttonDisabled]}
+            onPress={onMarkTaken}
+            disabled={disabled}
+          >
             <Ionicons name="checkmark" size={20} color="white" />
             <Text style={styles.buttonText}>{t('home.taken')}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.skipButton} onPress={onMarkSkipped}>
+          <TouchableOpacity
+            style={[styles.skipButton, disabled && styles.buttonDisabled]}
+            onPress={onMarkSkipped}
+            disabled={disabled}
+          >
             <Ionicons name="close" size={20} color="white" />
             <Text style={styles.buttonText}>{t('home.skip')}</Text>
           </TouchableOpacity>
@@ -194,5 +204,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 6,
     fontSize: 14,
+  },
+  buttonDisabled: {
+    opacity: 0.5,
   },
 });

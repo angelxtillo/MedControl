@@ -109,7 +109,8 @@
     "scheduled": "Programado: {{time}}",
     "pending": "Pendientes",
     "missed": "Perdidos",
-    "allCaughtUp": "Todo al día por hoy"
+    "allCaughtUp": "Todo al día por hoy",
+    "tomorrow": "Mañana"
   },
   "patients": {
     "title": "Pacientes",
@@ -399,6 +400,14 @@
     "en": "English",
     "pt": "Português",
     "fr": "Français"
+  },
+  "notifications": {
+    "mainTitle": "💊 Recordatorio de medicamento",
+    "mainBody": "Es hora de tomar {{med}}",
+    "mainBodyWithPatient": "Es hora de tomar {{med}} — Paciente: {{patient}}",
+    "followUpTitle": "⏰ Recordatorio pendiente",
+    "followUpBody": "Aún no se ha registrado {{med}}. Márcala como tomada u omitida.",
+    "followUpBodyWithPatient": "Aún no se ha registrado {{med}} — Paciente: {{patient}}. Márcala como tomada u omitida."
   },
   "patient": {
     "errorLoad": "No se pudieron cargar los datos del paciente",

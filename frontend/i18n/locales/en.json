@@ -109,7 +109,8 @@
     "scheduled": "Scheduled: {{time}}",
     "pending": "Pending",
     "missed": "Missed",
-    "allCaughtUp": "All caught up for today"
+    "allCaughtUp": "All caught up for today",
+    "tomorrow": "Tomorrow"
   },
   "patients": {
     "title": "Patients",
@@ -399,6 +400,14 @@
     "en": "English",
     "pt": "Português",
     "fr": "Français"
+  },
+  "notifications": {
+    "mainTitle": "💊 Medication reminder",
+    "mainBody": "Time to take {{med}}",
+    "mainBodyWithPatient": "Time to take {{med}} — Patient: {{patient}}",
+    "followUpTitle": "⏰ Pending reminder",
+    "followUpBody": "{{med}} has not been logged. Mark it as taken or skipped.",
+    "followUpBodyWithPatient": "{{med}} has not been logged — Patient: {{patient}}. Mark it as taken or skipped."
   },
   "patient": {
     "errorLoad": "Could not load patient data",

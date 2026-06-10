@@ -22,6 +22,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
 import { changeLanguage, availableLanguages, getCurrentLanguage } from '../../i18n';
 import api from '../../utils/api';
+import { syncAllMedicationNotifications, MedicationForSchedule } from '../../utils/notifications';
 
 export default function SettingsScreen() {
   const { t } = useTranslation();
@@ -103,6 +104,34 @@ export default function SettingsScreen() {
     await changeLanguage(langCode);
     setCurrentLang(langCode);
     setLanguageModalVisible(false);
+
+    // Reprogramar notificaciones en el nuevo idioma
+    try {
+      const patientsRes = await api.get('/patients');
+      const patients: { id: string; name: string }[] = patientsRes.data;
+      const medsWithPatient: MedicationForSchedule[] = [];
+      await Promise.all(
+        patients.map(async (p) => {
+          const medsRes = await api.get(`/medications/patient/${p.id}`);
+          const meds: any[] = medsRes.data;
+          for (const med of meds) {
+            if (!med.active) continue;
+            medsWithPatient.push({
+              id: med.id ?? med._id,
+              name: med.name,
+              patient_name: p.name,
+              frequency: med.frequency,
+              schedule_times: med.schedule_times,
+              notifications_enabled: med.notifications_enabled,
+              end_date: med.end_date,
+            });
+          }
+        }),
+      );
+      await syncAllMedicationNotifications(medsWithPatient);
+    } catch (err) {
+      console.warn('Error reprogramando notificaciones tras cambio de idioma:', err);
+    }
   };
 
   const getCurrentLanguageName = () => {

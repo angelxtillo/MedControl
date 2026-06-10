@@ -1,6 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import i18n from '../i18n';
 
 export const MEDICATION_CHANNEL = 'medication-reminders';
 
@@ -124,12 +125,12 @@ export async function scheduleMedicationNotifications(
   if (isExpired(med.end_date)) return;
 
   const weekdays = parseWeekdays(med.frequency);
-  const mainBody =
-    `Es hora de tomar ${med.name}` +
-    (med.patient_name ? ` — Paciente: ${med.patient_name}` : '');
-  const followUpBody =
-    `Aún no se ha registrado ${med.name}` +
-    (med.patient_name ? ` — Paciente: ${med.patient_name}. Márcala como tomada u omitida.` : '. Márcala como tomada u omitida.');
+  const mainBody = med.patient_name
+    ? i18n.t('notifications.mainBodyWithPatient', { med: med.name, patient: med.patient_name })
+    : i18n.t('notifications.mainBody', { med: med.name });
+  const followUpBody = med.patient_name
+    ? i18n.t('notifications.followUpBodyWithPatient', { med: med.name, patient: med.patient_name })
+    : i18n.t('notifications.followUpBody', { med: med.name });
 
   for (const time of med.schedule_times) {
     const [h, m] = time.split(':').map(Number);
@@ -138,7 +139,7 @@ export async function scheduleMedicationNotifications(
     const baseTimeStr = `${pad(h)}:${pad(m)}`;
 
     const mainContent = {
-      title: '💊 Recordatorio de medicamento',
+      title: i18n.t('notifications.mainTitle'),
       body: mainBody,
       sound: 'default' as const,
       priority: Notifications.AndroidNotificationPriority.MAX,
@@ -168,7 +169,7 @@ export async function scheduleMedicationNotifications(
           await Notifications.scheduleNotificationAsync({
             identifier: `med-${med.id}-w${wd}-f${offsetMin}-${pad(h)}${pad(m)}`,
             content: {
-              title: '⏰ Recordatorio pendiente',
+              title: i18n.t('notifications.followUpTitle'),
               body: followUpBody,
               sound: 'default' as const,
               priority: Notifications.AndroidNotificationPriority.MAX,

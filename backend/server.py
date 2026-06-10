@@ -103,6 +103,15 @@ async def lifespan(app: FastAPI):
         # Índices compuestos para rendimiento
         await db.medication_logs.create_index([("patient_id", 1), ("scheduled_datetime", -1)])
         await db.medications.create_index("patient_id")
+        # Índice único para evitar logs duplicados (ejecutar cleanup_duplicate_logs.py primero)
+        try:
+            await db.medication_logs.create_index(
+                [("medication_id", 1), ("scheduled_datetime", 1)],
+                unique=True,
+                name="medication_logs_unique_dose"
+            )
+        except Exception as idx_err:
+            logger.warning(f"Could not create unique index on medication_logs: {idx_err}")
         # TTL para verificaciones de email (15 min)
         await db.email_verifications.create_index("expires_at", expireAfterSeconds=0)
         # TTL para invitaciones (48 horas)
@@ -308,6 +317,18 @@ class ResendVerificationRequest(BaseModel):
     email: EmailStr
 
 # ============= HELPERS =============
+def utc_now_naive() -> datetime:
+    """Retorna datetime UTC naive para comparar con strings parseados (YYYY-MM-DDTHH:MM:SS)."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+def ensure_naive(dt: datetime) -> datetime:
+    """Convierte datetime a naive UTC si es aware (motor puede devolver ambos)."""
+    if dt is None:
+        return None
+    if dt.tzinfo is not None:
+        return dt.replace(tzinfo=None)
+    return dt
+
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
@@ -360,6 +381,7 @@ def med_baseline_local(med: dict, timezone_offset: int):
     base = med.get("updated_at") or med.get("created_at")
     if not base:
         return None
+    base = ensure_naive(base)
     return base + timedelta(minutes=timezone_offset)
 
 # ============= INVITATION HELPERS =============
@@ -987,7 +1009,7 @@ async def get_logs(
         ]
 
     # --- include_missed=True: enrich with synthetic missed logs ---
-    now_local = datetime.now(timezone.utc) + timedelta(minutes=timezone_offset)
+    now_local = utc_now_naive() + timedelta(minutes=timezone_offset)
     thirty_days_ago = (now_local - timedelta(days=30)).date().isoformat()
 
     real_logs = await db.medication_logs.find({
@@ -1060,7 +1082,8 @@ async def get_logs(
                 try:
                     if datetime.fromisoformat(scheduled_dt) + timedelta(minutes=MISSED_GRACE_MINUTES) >= now_local:
                         continue
-                except (ValueError, TypeError):
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Error parsing scheduled_dt '{scheduled_dt}' in logs: {e}")
                     continue
 
                 baseline = med_baseline_local(med, timezone_offset)
@@ -1068,8 +1091,8 @@ async def get_logs(
                     try:
                         if datetime.fromisoformat(scheduled_dt) < baseline:
                             continue
-                    except (ValueError, TypeError):
-                        pass
+                    except (ValueError, TypeError) as e:
+                        logger.warning(f"Error comparing baseline in logs: {e}")
 
                 if (med_id, scheduled_dt) in existing_keys:
                     continue
@@ -1100,17 +1123,54 @@ async def create_log(log: MedicationLogCreate, user_id: str = Depends(get_curren
     })
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
-    
+
+    taken_dt = log.taken_datetime
+    if log.status == "taken" and not taken_dt:
+        taken_dt = datetime.now(timezone.utc).isoformat()
+
+    # Upsert: si ya existe log para (medication_id, scheduled_datetime), actualizar
+    existing = await db.medication_logs.find_one({
+        "medication_id": log.medication_id,
+        "scheduled_datetime": log.scheduled_datetime
+    })
+
+    if existing:
+        update_fields = {
+            "status": log.status,
+            "notes": log.notes,
+        }
+        if taken_dt:
+            update_fields["taken_datetime"] = taken_dt
+
+        await db.medication_logs.update_one(
+            {"_id": existing["_id"]},
+            {"$set": update_fields}
+        )
+        updated = await db.medication_logs.find_one({"_id": existing["_id"]})
+        return {
+            "id": str(updated["_id"]),
+            "medication_id": updated["medication_id"],
+            "patient_id": updated["patient_id"],
+            "scheduled_datetime": updated["scheduled_datetime"],
+            "taken_datetime": updated.get("taken_datetime"),
+            "status": updated["status"],
+            "notes": updated.get("notes"),
+            "created_at": ensure_naive(updated["created_at"]).isoformat() if updated.get("created_at") else None
+        }
+
+    # Crear nuevo log
     log_dict = {
         **log.dict(),
         "created_at": datetime.now(timezone.utc)
     }
-    if log.status == "taken" and not log_dict.get("taken_datetime"):
-        log_dict["taken_datetime"] = datetime.now(timezone.utc).isoformat()
+    if taken_dt:
+        log_dict["taken_datetime"] = taken_dt
+
     result = await db.medication_logs.insert_one(log_dict)
     return {
         "id": str(result.inserted_id),
         **log.dict(),
+        "taken_datetime": taken_dt,
         "created_at": log_dict["created_at"].isoformat()
     }
 
@@ -1155,7 +1215,7 @@ async def update_log(
 # ============= DASHBOARD ENDPOINT =============
 @api_router.get("/dashboard/today")
 async def get_today_dashboard(user_id: str = Depends(get_current_user), timezone_offset: int = 0):
-    now_local = datetime.now(timezone.utc) + timedelta(minutes=timezone_offset)
+    now_local = utc_now_naive() + timedelta(minutes=timezone_offset)
     today_str = now_local.date().isoformat()
     weekday_local = now_local.weekday()  # 0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri, 5=Sat, 6=Sun
 
@@ -1224,8 +1284,8 @@ async def get_today_dashboard(user_id: str = Depends(get_current_user), timezone
                 try:
                     if datetime.fromisoformat(scheduled_datetime) < baseline:
                         continue
-                except (ValueError, TypeError):
-                    pass
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Error comparing baseline for med {med.get('name')}: {e}")
 
             # Determine actual status before building the item
             if log:
@@ -1235,7 +1295,8 @@ async def get_today_dashboard(user_id: str = Depends(get_current_user), timezone
                     scheduled = datetime.fromisoformat(scheduled_datetime)
                     grace = timedelta(minutes=MISSED_GRACE_MINUTES)
                     item_status = "missed" if now_local > scheduled + grace else "pending"
-                except (ValueError, TypeError):
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Error parsing scheduled_datetime '{scheduled_datetime}': {e}")
                     item_status = "pending"
 
             item = {
@@ -1279,7 +1340,7 @@ async def get_upcoming_dashboard(
     timezone_offset: int = 0,
     user_id: str = Depends(get_current_user)
 ):
-    now_local = datetime.now(timezone.utc) + timedelta(minutes=timezone_offset)
+    now_local = utc_now_naive() + timedelta(minutes=timezone_offset)
 
     DAYS_ES = {
         0: "Lunes", 1: "Martes", 2: "Miércoles",

@@ -109,7 +109,8 @@
     "scheduled": "Prévu : {{time}}",
     "pending": "En attente",
     "missed": "Manqués",
-    "allCaughtUp": "Tout est à jour pour aujourd'hui"
+    "allCaughtUp": "Tout est à jour pour aujourd'hui",
+    "tomorrow": "Demain"
   },
   "patients": {
     "title": "Patients",
@@ -399,6 +400,14 @@
     "en": "English",
     "pt": "Português",
     "fr": "Français"
+  },
+  "notifications": {
+    "mainTitle": "💊 Rappel de médicament",
+    "mainBody": "Il est temps de prendre {{med}}",
+    "mainBodyWithPatient": "Il est temps de prendre {{med}} — Patient : {{patient}}",
+    "followUpTitle": "⏰ Rappel en attente",
+    "followUpBody": "{{med}} n'a pas été enregistré. Marquez-le comme pris ou sauté.",
+    "followUpBodyWithPatient": "{{med}} n'a pas été enregistré — Patient : {{patient}}. Marquez-le comme pris ou sauté."
   },
   "patient": {
     "errorLoad": "Impossible de charger les données du patient",
