@@ -172,6 +172,34 @@ export default function EditMedication() {
     return FREQUENCY_OPTIONS.find(f => f.value === selectedFreq)?.label || '';
   };
 
+  const expandScheduleTimes = (baseTime: string): string[] => {
+    let intervalHours: number;
+    if (selectedFreq === 'custom' && customType === 'hours') {
+      intervalHours = customHours;
+    } else {
+      const freqOption = FREQUENCY_OPTIONS.find(f => f.value === selectedFreq);
+      if (!freqOption || freqOption.hours === 0 || freqOption.hours >= 24) return scheduleTimes;
+      intervalHours = freqOption.hours;
+    }
+    const parts = baseTime.split(':');
+    const baseMinutes = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+    const intervalMinutes = intervalHours * 60;
+    const dosesPerDay = Math.floor(1440 / intervalMinutes);
+    const times: string[] = [];
+    for (let i = 0; i < dosesPerDay; i++) {
+      const totalMinutes = (baseMinutes + i * intervalMinutes) % 1440;
+      times.push(`${Math.floor(totalMinutes / 60).toString().padStart(2, '0')}:${(totalMinutes % 60).toString().padStart(2, '0')}`);
+    }
+    times.sort();
+    return times;
+  };
+
+  const shouldExpandInterval = (): boolean => {
+    const freqOption = FREQUENCY_OPTIONS.find(f => f.value === selectedFreq);
+    return (freqOption && freqOption.hours > 0 && freqOption.hours < 24) ||
+           (selectedFreq === 'custom' && customType === 'hours');
+  };
+
   const handleSave = async () => {
     if (!name || !dosage || !selectedFreq) {
       Alert.alert(t('common.error'), t('medications.fillRequired'));
@@ -184,9 +212,9 @@ export default function EditMedication() {
       return;
     }
 
-    // Al editar, los horarios visibles en pantalla son la verdad: se guardan tal cual.
-    // La expansión automática por intervalo solo aplica al crear en el wizard.
-    const finalTimes = validTimes;
+    const finalTimes = shouldExpandInterval() && validTimes.length > 0
+      ? expandScheduleTimes(validTimes[0])
+      : validTimes;
 
     setSaving(true);
     try {
