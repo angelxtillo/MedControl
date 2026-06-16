@@ -17,9 +17,52 @@ import { useAuth } from '../contexts/AuthContext';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+  withSequence,
+  Easing,
+} from 'react-native-reanimated';
 
 const ONBOARDING_KEY = '@medcontrol_onboarding_complete';
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function LoadingLogo() {
+  const scale = useSharedValue(1);
+  const opacity = useSharedValue(1);
+
+  useEffect(() => {
+    scale.value = withRepeat(
+      withSequence(
+        withTiming(1.15, { duration: 500, easing: Easing.inOut(Easing.ease) }),
+        withTiming(1, { duration: 500, easing: Easing.inOut(Easing.ease) })
+      ),
+      -1,
+      false
+    );
+    opacity.value = withRepeat(
+      withSequence(
+        withTiming(0.6, { duration: 500, easing: Easing.inOut(Easing.ease) }),
+        withTiming(1, { duration: 500, easing: Easing.inOut(Easing.ease) })
+      ),
+      -1,
+      false
+    );
+  }, []);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+    opacity: opacity.value,
+  }));
+
+  return (
+    <Animated.View style={[styles.iconCircle, animatedStyle]}>
+      <Ionicons name="medical" size={48} color="#2196F3" />
+    </Animated.View>
+  );
+}
 
 export default function Index() {
   const { t } = useTranslation();
@@ -167,11 +210,8 @@ export default function Index() {
     return (
       <SafeAreaView style={styles.loadingContainer}>
         <View style={styles.loadingContent}>
-          <View style={styles.iconCircle}>
-            <Ionicons name="medical" size={48} color="#2196F3" />
-          </View>
+          <LoadingLogo />
           <Text style={styles.loadingTitle}>MedControl</Text>
-          <ActivityIndicator size="large" color="#2196F3" style={{ marginTop: 20 }} />
         </View>
       </SafeAreaView>
     );
@@ -350,7 +390,7 @@ export default function Index() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F5F7FA',
   },
   keyboardView: {
     flex: 1,
@@ -443,7 +483,7 @@ const styles = StyleSheet.create({
   },
   loadingContainer: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F5F7FA',
   },
   loadingContent: {
     flex: 1,
