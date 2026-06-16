@@ -17,14 +17,14 @@ import { useLocalSearchParams, router } from 'expo-router';
 import api from '../../utils/api';
 
 const FREQUENCIES = [
-  { label: 'Cada 4 horas', value: 'cada_4h', hours: 4, timesPerDay: 6 },
-  { label: 'Cada 6 horas', value: 'cada_6h', hours: 6, timesPerDay: 4 },
-  { label: 'Cada 8 horas', value: 'cada_8h', hours: 8, timesPerDay: 3 },
-  { label: 'Cada 12 horas', value: 'cada_12h', hours: 12, timesPerDay: 2 },
-  { label: '1 vez al día', value: '1_vez', hours: 24, timesPerDay: 1 },
-  { label: '2 veces al día', value: '2_veces', hours: 12, timesPerDay: 2 },
-  { label: '3 veces al día', value: '3_veces', hours: 8, timesPerDay: 3 },
-  { label: 'Personalizado', value: 'custom', hours: 0, timesPerDay: 0 },
+  { label: 'Cada 4 horas', value: 'cada_4h', hours: 4 },
+  { label: 'Cada 6 horas', value: 'cada_6h', hours: 6 },
+  { label: 'Cada 8 horas', value: 'cada_8h', hours: 8 },
+  { label: 'Cada 12 horas', value: 'cada_12h', hours: 12 },
+  { label: '1 vez al día', value: '1_vez', hours: 24 },
+  { label: '2 veces al día', value: '2_veces', hours: 12 },
+  { label: '3 veces al día', value: '3_veces', hours: 8 },
+  { label: 'Personalizado', value: 'custom', hours: 0 },
 ];
 
 export default function AddMedicationImproved() {
@@ -49,17 +49,19 @@ export default function AddMedicationImproved() {
 
   const generateScheduleTimes = () => {
     const freq = FREQUENCIES.find(f => f.value === selectedFrequency);
-    if (!freq || freq.value === 'custom' || !startTime) return;
+    if (!freq || freq.value === 'custom' || !startTime || freq.hours === 0) return;
 
-    const times: string[] = [];
     const [hours, minutes] = startTime.split(':').map(Number);
-    
-    for (let i = 0; i < freq.timesPerDay; i++) {
-      const totalHours = hours + (freq.hours * i);
-      const finalHours = totalHours % 24;
-      const formattedTime = `${String(finalHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
-      times.push(formattedTime);
+    const baseMinutes = hours * 60 + minutes;
+    const intervalMinutes = freq.hours * 60;
+    const dosesPerDay = Math.floor(1440 / intervalMinutes);
+    const times: string[] = [];
+
+    for (let i = 0; i < dosesPerDay; i++) {
+      const totalMinutes = (baseMinutes + i * intervalMinutes) % 1440;
+      times.push(`${Math.floor(totalMinutes / 60).toString().padStart(2, '0')}:${(totalMinutes % 60).toString().padStart(2, '0')}`);
     }
+    times.sort();
 
     setScheduleTimes(times);
     setShowAutoGenerate(false);

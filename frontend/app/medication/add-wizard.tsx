@@ -165,12 +165,13 @@ export default function AddMedicationWizard() {
     const parts = baseTime.split(':');
     const baseMinutes = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
     const intervalMinutes = intervalHours * 60;
+    const dosesPerDay = Math.floor(1440 / intervalMinutes);
     const times: string[] = [];
-    let current = baseMinutes;
-    while (current < 1440) {
-      times.push(`${Math.floor(current / 60).toString().padStart(2, '0')}:${(current % 60).toString().padStart(2, '0')}`);
-      current += intervalMinutes;
+    for (let i = 0; i < dosesPerDay; i++) {
+      const totalMinutes = (baseMinutes + i * intervalMinutes) % 1440;
+      times.push(`${Math.floor(totalMinutes / 60).toString().padStart(2, '0')}:${(totalMinutes % 60).toString().padStart(2, '0')}`);
     }
+    times.sort();
     return times;
   };
 
