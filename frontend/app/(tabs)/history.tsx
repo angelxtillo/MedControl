@@ -323,7 +323,7 @@ export default function History() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F5F7FA',
   },
   headerSection: {
     backgroundColor: 'white',
@@ -416,12 +416,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderRadius: 16,
     padding: 16,
-    marginBottom: 12,
+    marginBottom: 14,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
   },
   logHeader: {
     flexDirection: 'row',
@@ -440,8 +440,8 @@ const styles = StyleSheet.create({
   },
   medicationName: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#212121',
+    fontWeight: '700',
+    color: '#1565C0',
     marginBottom: 4,
   },
   logDate: {

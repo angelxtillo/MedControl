@@ -265,7 +265,7 @@ export default function Patients() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F5F7FA',
   },
   content: {
     flex: 1,

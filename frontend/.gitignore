@@ -38,3 +38,5 @@ yarn-error.*
 
 app-example
 .metro-cache/
+android/
+ios/

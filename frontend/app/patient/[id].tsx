@@ -444,7 +444,7 @@ export default function PatientDetail() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F5F7FA',
   },
   loadingText: {
     textAlign: 'center',
@@ -454,10 +454,16 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: 'white',
+    borderRadius: 16,
+    margin: 16,
+    marginBottom: 0,
     padding: 24,
     alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
   },
   avatarContainer: {
     marginBottom: 16,
@@ -466,6 +472,8 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
+    borderWidth: 3,
+    borderColor: '#E3F2FD',
   },
   avatarPlaceholder: {
     width: 120,
@@ -474,11 +482,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#E3F2FD',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: '#BBDEFB',
   },
   patientName: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#212121',
+    color: '#1565C0',
     marginBottom: 4,
   },
   patientAge: {
@@ -563,12 +573,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderRadius: 16,
     padding: 16,
-    marginBottom: 12,
+    marginBottom: 14,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
   },
   medicationHeader: {
     flexDirection: 'row',
@@ -579,8 +589,8 @@ const styles = StyleSheet.create({
   },
   medicationName: {
     fontSize: 18,
-    fontWeight: '600',
-    color: '#212121',
+    fontWeight: '700',
+    color: '#1565C0',
     marginBottom: 4,
   },
   medicationDosage: {

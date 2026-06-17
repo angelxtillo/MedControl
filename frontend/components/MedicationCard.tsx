@@ -1,7 +1,12 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 
 interface MedicationCardProps {
   medicationName: string;
@@ -26,16 +31,53 @@ export const MedicationCard: React.FC<MedicationCardProps> = ({
 }) => {
   const { t } = useTranslation();
 
+  const takenScale = useSharedValue(1);
+  const skipScale = useSharedValue(1);
+
+  const takenAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: takenScale.value }],
+  }));
+
+  const skipAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: skipScale.value }],
+  }));
+
+  const handleTakenPressIn = () => {
+    takenScale.value = withSpring(0.96, { damping: 15, stiffness: 300 });
+  };
+  const handleTakenPressOut = () => {
+    takenScale.value = withSpring(1, { damping: 15, stiffness: 300 });
+  };
+  const handleSkipPressIn = () => {
+    skipScale.value = withSpring(0.96, { damping: 15, stiffness: 300 });
+  };
+  const handleSkipPressOut = () => {
+    skipScale.value = withSpring(1, { damping: 15, stiffness: 300 });
+  };
+
   const getStatusColor = () => {
     switch (status) {
       case 'taken':
         return '#4CAF50';
       case 'missed':
-        return '#f44336';
+        return '#F44336';
       case 'skipped':
         return '#FF9800';
       default:
         return '#2196F3';
+    }
+  };
+
+  const getStatusBgColor = () => {
+    switch (status) {
+      case 'taken':
+        return '#E8F5E9';
+      case 'missed':
+        return '#FFEBEE';
+      case 'skipped':
+        return '#FFF3E0';
+      default:
+        return '#E3F2FD';
     }
   };
 
@@ -80,27 +122,43 @@ export const MedicationCard: React.FC<MedicationCardProps> = ({
       <View style={styles.timeContainer}>
         <Ionicons name="time-outline" size={16} color="#666" />
         <Text style={styles.time}>{scheduledTime}</Text>
-        <Text style={styles.statusText}>{getStatusText()}</Text>
+        <View style={[styles.statusPill, { backgroundColor: getStatusBgColor() }]}>
+          <Text style={[styles.statusPillText, { color: getStatusColor() }]}>
+            {getStatusText()}
+          </Text>
+        </View>
       </View>
 
       {status === 'pending' && (
         <View style={styles.actionsContainer}>
-          <TouchableOpacity
-            style={[styles.takenButton, disabled && styles.buttonDisabled]}
-            onPress={onMarkTaken}
-            disabled={disabled}
-          >
-            <Ionicons name="checkmark" size={20} color="white" />
-            <Text style={styles.buttonText}>{t('home.taken')}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.skipButton, disabled && styles.buttonDisabled]}
-            onPress={onMarkSkipped}
-            disabled={disabled}
-          >
-            <Ionicons name="close" size={20} color="white" />
-            <Text style={styles.buttonText}>{t('home.skip')}</Text>
-          </TouchableOpacity>
+          <Animated.View style={[{ flex: 1 }, takenAnimatedStyle]}>
+            <Animated.View
+              style={[styles.takenButton, disabled && styles.buttonDisabled]}
+              onTouchStart={handleTakenPressIn}
+              onTouchEnd={() => {
+                handleTakenPressOut();
+                if (!disabled) onMarkTaken();
+              }}
+              onTouchCancel={handleTakenPressOut}
+            >
+              <Ionicons name="checkmark" size={20} color="white" />
+              <Text style={styles.buttonText}>{t('home.taken')}</Text>
+            </Animated.View>
+          </Animated.View>
+          <Animated.View style={[{ flex: 1 }, skipAnimatedStyle]}>
+            <Animated.View
+              style={[styles.skipButton, disabled && styles.buttonDisabled]}
+              onTouchStart={handleSkipPressIn}
+              onTouchEnd={() => {
+                handleSkipPressOut();
+                if (!disabled) onMarkSkipped();
+              }}
+              onTouchCancel={handleSkipPressOut}
+            >
+              <Ionicons name="close" size={20} color="white" />
+              <Text style={styles.buttonText}>{t('home.skip')}</Text>
+            </Animated.View>
+          </Animated.View>
         </View>
       )}
     </View>
@@ -112,12 +170,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderRadius: 16,
     padding: 16,
-    marginBottom: 12,
+    marginBottom: 14,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
   },
   header: {
     flexDirection: 'row',
@@ -138,8 +196,8 @@ const styles = StyleSheet.create({
   },
   medicationName: {
     fontSize: 18,
-    fontWeight: '600',
-    color: '#212121',
+    fontWeight: '700',
+    color: '#1565C0',
     marginBottom: 4,
   },
   dosage: {
@@ -171,10 +229,17 @@ const styles = StyleSheet.create({
     marginLeft: 6,
     fontWeight: '500',
   },
-  statusText: {
-    fontSize: 14,
-    color: '#999',
+  statusPill: {
     marginLeft: 'auto',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  statusPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   actionsContainer: {
     flexDirection: 'row',

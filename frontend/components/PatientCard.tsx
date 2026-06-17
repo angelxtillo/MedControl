@@ -45,12 +45,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderRadius: 16,
     padding: 16,
-    marginBottom: 12,
+    marginBottom: 14,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
   },
   avatarContainer: {
     marginRight: 16,
@@ -59,6 +59,8 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
+    borderWidth: 2,
+    borderColor: '#E3F2FD',
   },
   avatarPlaceholder: {
     width: 60,
@@ -67,14 +69,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#E3F2FD',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#BBDEFB',
   },
   infoContainer: {
     flex: 1,
   },
   name: {
     fontSize: 18,
-    fontWeight: '600',
-    color: '#212121',
+    fontWeight: '700',
+    color: '#1565C0',
     marginBottom: 4,
   },
   age: {

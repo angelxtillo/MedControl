@@ -17,6 +17,7 @@ import api from '../../utils/api';
 import { useFocusEffect } from '@react-navigation/native';
 import { requestNotificationPermissions, syncAllMedicationNotifications, MedicationForSchedule } from '../../utils/notifications';
 import { useTranslation } from 'react-i18next';
+import Animated, { FadeInDown, FadeIn, ZoomIn } from 'react-native-reanimated';
 
 interface DashboardData {
   medications_today: any[];
@@ -412,13 +413,15 @@ export default function Home() {
               return (
                 <View style={styles.nextDoseCard}>
                   <View style={styles.nextDoseHeader}>
-                    <Ionicons name="time-outline" size={18} color="#2196F3" />
+                    <Ionicons name="time-outline" size={18} color="rgba(255,255,255,0.85)" />
                     <Text style={styles.nextDoseLabel}>{t('home.nextDoseTitle')}</Text>
                   </View>
                   <Text style={styles.nextDoseMed}>{firstTomorrow.medication_name}</Text>
-                  <Text style={styles.nextDoseTime}>
-                    {t('home.tomorrow')} {firstTomorrow.scheduled_time}
-                  </Text>
+                  <View style={styles.nextDoseTimeBadge}>
+                    <Text style={styles.nextDoseTime}>
+                      {t('home.tomorrow')} {firstTomorrow.scheduled_time}
+                    </Text>
+                  </View>
                   {firstTomorrow.patient_name ? (
                     <Text style={styles.nextDosePatient}>{firstTomorrow.patient_name}</Text>
                   ) : null}
@@ -433,14 +436,16 @@ export default function Home() {
           return (
             <View style={styles.nextDoseCard}>
               <View style={styles.nextDoseHeader}>
-                <Ionicons name="time-outline" size={18} color="#2196F3" />
+                <Ionicons name="time-outline" size={18} color="rgba(255,255,255,0.85)" />
                 <Text style={styles.nextDoseLabel}>{t('home.nextDoseTitle')}</Text>
               </View>
               <Text style={styles.nextDoseMed}>{nextDose.medication_name}</Text>
-              <Text style={styles.nextDoseTime}>
-                {nextDose.next_dose_time || nextDose.scheduled_time}
-                {timeUntil ? `  ·  ${timeUntil}` : ''}
-              </Text>
+              <View style={styles.nextDoseTimeBadge}>
+                <Text style={styles.nextDoseTime}>
+                  {nextDose.next_dose_time || nextDose.scheduled_time}
+                  {timeUntil ? `  ·  ${timeUntil}` : ''}
+                </Text>
+              </View>
               {nextDose.patient_name ? (
                 <Text style={styles.nextDosePatient}>{nextDose.patient_name}</Text>
               ) : null}
@@ -465,10 +470,15 @@ export default function Home() {
         {loading && visibleMeds.length === 0 ? (
           <ActivityIndicator size="large" color="#2196F3" style={{ marginTop: 48 }} />
         ) : visibleMeds.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Ionicons name="checkmark-circle" size={64} color="#4CAF50" />
+          <Animated.View
+            style={styles.emptyContainer}
+            entering={FadeIn.duration(400).springify()}
+          >
+            <Animated.View entering={ZoomIn.duration(500).springify()}>
+              <Ionicons name="checkmark-circle" size={64} color="#4CAF50" />
+            </Animated.View>
             <Text style={styles.emptyText}>{t('home.allCaughtUp')}</Text>
-          </View>
+          </Animated.View>
         ) : (
           Object.entries(patientGroups).map(([patientName, meds]) => (
             <View key={patientName}>
@@ -476,18 +486,22 @@ export default function Home() {
                 <Ionicons name="person-circle-outline" size={18} color="#666" />
                 <Text style={styles.patientGroupName}>{patientName}</Text>
               </View>
-              {meds.map((med) => (
-                <MedicationCard
+              {meds.map((med, index) => (
+                <Animated.View
                   key={`${med.medication_id}-${med.scheduled_datetime}`}
-                  medicationName={med.medication_name}
-                  dosage={med.dosage}
-                  scheduledTime={med.scheduled_time}
-                  patientName={med.patient_name}
-                  status={med.status}
-                  disabled={processingKeys.has(`${med.medication_id}:${med.scheduled_datetime}`)}
-                  onMarkTaken={() => handleMarkTaken(med.medication_id, med.patient_id, med.scheduled_datetime, med.log_id)}
-                  onMarkSkipped={() => handleMarkSkipped(med.medication_id, med.patient_id, med.scheduled_datetime, med.log_id)}
-                />
+                  entering={FadeInDown.delay(index * 40).duration(300).springify()}
+                >
+                  <MedicationCard
+                    medicationName={med.medication_name}
+                    dosage={med.dosage}
+                    scheduledTime={med.scheduled_time}
+                    patientName={med.patient_name}
+                    status={med.status}
+                    disabled={processingKeys.has(`${med.medication_id}:${med.scheduled_datetime}`)}
+                    onMarkTaken={() => handleMarkTaken(med.medication_id, med.patient_id, med.scheduled_datetime, med.log_id)}
+                    onMarkSkipped={() => handleMarkSkipped(med.medication_id, med.patient_id, med.scheduled_datetime, med.log_id)}
+                  />
+                </Animated.View>
               ))}
             </View>
           ))
@@ -522,7 +536,7 @@ export default function Home() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F5F7FA',
   },
   header: {
     flexDirection: 'row',
@@ -575,7 +589,7 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 16,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F5F7FA',
   },
   sectionTitle: {
     fontSize: 20,
@@ -595,41 +609,47 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   nextDoseCard: {
-    backgroundColor: '#E3F2FD',
+    backgroundColor: '#2196F3',
     borderRadius: 16,
     padding: 16,
     marginBottom: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: '#2196F3',
   },
   nextDoseHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: 8,
     gap: 6,
   },
   nextDoseLabel: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#2196F3',
+    color: 'rgba(255,255,255,0.85)',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   nextDoseMed: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
-    color: '#1565C0',
-    marginBottom: 2,
+    color: 'white',
+    marginBottom: 4,
   },
   nextDoseTime: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#1976D2',
-    marginBottom: 2,
+    color: 'white',
+    marginBottom: 4,
+  },
+  nextDoseTimeBadge: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    alignSelf: 'flex-start',
   },
   nextDosePatient: {
     fontSize: 13,
-    color: '#42A5F5',
+    color: 'rgba(255,255,255,0.85)',
+    marginTop: 4,
   },
   retryingBanner: {
     backgroundColor: '#FFF9C4',
