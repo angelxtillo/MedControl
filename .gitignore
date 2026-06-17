@@ -102,3 +102,4 @@ android-sdk/-e
 *.env
 *.env.*
 .claude/
+.claude/
