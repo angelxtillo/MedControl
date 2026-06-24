@@ -82,18 +82,18 @@ export default function EditMedication() {
           setPatientName(patient.name);
           setName(medication.name);
           setDosage(medication.dosage);
-          let isInterval = false;
+          let isSingleTime = false;
           const matchedOpt = FREQUENCY_OPTIONS.find(o => o.label === medication.frequency);
           if (matchedOpt) {
             setSelectedFreq(matchedOpt.value);
-            isInterval = matchedOpt.hours > 0 && matchedOpt.hours < 24;
+            isSingleTime = matchedOpt.hours > 0; // interval modes + once daily
           } else {
             setSelectedFreq('custom');
             const hoursMatch = medication.frequency.match(/^Cada (\d+) horas?$/);
             if (hoursMatch) {
               setCustomType('hours');
               setCustomHours(parseInt(hoursMatch[1], 10));
-              isInterval = true;
+              isSingleTime = true;
             } else {
               const dayParts = medication.frequency.split(', ');
               const days = dayParts.map((p: string) =>
@@ -105,10 +105,10 @@ export default function EditMedication() {
               }
             }
           }
-          // Interval meds are stored as the full expanded set; collapse to a single
-          // base time so the edit screen shows one selector (re-expanded on save).
+          // Single-time meds (once daily / interval) show one selector. Interval meds are
+          // stored as the full expanded set, so collapse to one entry (re-expanded on save).
           const loadedTimes = medication.schedule_times || [];
-          setScheduleTimes(isInterval && loadedTimes.length > 0 ? [loadedTimes[0]] : loadedTimes);
+          setScheduleTimes(isSingleTime && loadedTimes.length > 0 ? [loadedTimes[0]] : loadedTimes);
           setEndDate(medication.end_date || '');
           setInstructions(medication.instructions || '');
           setActive(medication.active);
@@ -200,17 +200,26 @@ export default function EditMedication() {
     return times;
   };
 
+  // True only for "cada N horas": the stored times are an expanded set re-generated on save.
   const shouldExpandInterval = (): boolean => {
     const freqOption = FREQUENCY_OPTIONS.find(f => f.value === selectedFreq);
     return (freqOption && freqOption.hours > 0 && freqOption.hours < 24) ||
            (selectedFreq === 'custom' && customType === 'hours');
   };
 
-  // Interval mode uses a single base time. If the user switches into it while several
-  // exact times are present, collapse them so no contradictory state can be saved.
+  // Modes that take a SINGLE time entry: "una vez al día" (one dose) and "cada N horas"
+  // (one base time). "Varias veces al día" and custom-days allow multiple exact times.
+  const isSingleTimeMode = (): boolean => {
+    const freqOption = FREQUENCY_OPTIONS.find(f => f.value === selectedFreq);
+    return (freqOption && freqOption.hours > 0) ||
+           (selectedFreq === 'custom' && customType === 'hours');
+  };
+
+  // If the user switches into a single-time mode while several exact times are
+  // present, collapse them so no contradictory state can be saved.
   useEffect(() => {
     if (loading) return;
-    if (shouldExpandInterval() && scheduleTimes.length > 1) {
+    if (isSingleTimeMode() && scheduleTimes.length > 1) {
       setScheduleTimes(scheduleTimes.slice(0, 1));
     }
   }, [selectedFreq, customType]);
@@ -376,7 +385,7 @@ export default function EditMedication() {
           <View style={styles.inputGroup}>
             <View style={styles.labelRow}>
               <Text style={styles.label}>{t('medications.schedule')} *</Text>
-              {!shouldExpandInterval() && (
+              {!isSingleTimeMode() && (
                 <TouchableOpacity onPress={addTimeSlot} style={styles.addTimeButton}>
                   <Ionicons name="add-circle" size={24} color="#2196F3" />
                   <Text style={styles.addTimeText}>{t('medications.addSchedule2')}</Text>

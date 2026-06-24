@@ -136,20 +136,22 @@ export default function AddMedicationWizard() {
     setScheduleTimes(scheduleTimes.filter(t => t !== time));
   };
 
-  // Interval mode ("cada N horas") uses a SINGLE base time; the rest of the day is
-  // generated automatically. Fixed-times mode allows multiple exact times.
-  const isIntervalMode = () => {
+  // Modes that take a SINGLE time entry:
+  //   - "Una vez al día" (once_daily): one dose, no expansion.
+  //   - "Cada N horas" (interval): one base time, the rest of the day is generated.
+  // Only "Varias veces al día" and custom-days allow multiple exact times.
+  const isSingleTimeMode = () => {
     const freqOption = FREQUENCY_OPTIONS.find(f => f.value === frequency);
     return (
-      (freqOption && freqOption.hours > 0 && freqOption.hours < 24) ||
+      (freqOption && freqOption.hours > 0) ||
       (frequency === 'custom' && customType === 'hours')
     );
   };
 
-  // If the user switches into interval mode after having added several fixed times,
-  // collapse them to a single base time so no contradictory state can be saved.
+  // If the user switches into a single-time mode after having added several times,
+  // collapse them to a single entry so no contradictory state can be saved.
   useEffect(() => {
-    if (isIntervalMode() && scheduleTimes.length > 1) {
+    if (isSingleTimeMode() && scheduleTimes.length > 1) {
       setScheduleTimes(scheduleTimes.slice(0, 1));
     }
   }, [frequency, customType]);
@@ -460,7 +462,7 @@ export default function AddMedicationWizard() {
             </View>
           )}
 
-          {!(isFixedInterval && scheduleTimes.length >= 1) && (
+          {!(isSingleTimeMode() && scheduleTimes.length >= 1) && (
             <TouchableOpacity
               style={styles.addTimeButton}
               onPress={() => {
