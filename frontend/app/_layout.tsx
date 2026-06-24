@@ -1,19 +1,26 @@
 import '../i18n'; // initialize i18n before any component calls t()
 import { useEffect } from 'react';
-import { Stack, router } from 'expo-router';
+import { Stack, router, useSegments } from 'expo-router';
 import { AuthProvider } from '../contexts/AuthContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
 
+// Route groups that require a valid session. Public routes (index/login,
+// onboarding) are intentionally excluded so the guard never interrupts them.
+const PROTECTED_ROOTS = ['(tabs)', 'patient', 'medication'];
+
 function AppStack() {
   const { t } = useTranslation();
   const { user, loading } = useAuth();
+  const segments = useSegments();
 
   useEffect(() => {
-    if (!user && !loading) {
+    if (loading) return;
+    const inProtectedRoute = PROTECTED_ROOTS.includes(segments[0] as string);
+    if (!user && inProtectedRoute) {
       router.replace('/');
     }
-  }, [user, loading]);
+  }, [user, loading, segments]);
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />

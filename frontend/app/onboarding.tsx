@@ -59,11 +59,13 @@ export default function OnboardingScreen() {
   const scrollX = useRef(new Animated.Value(0)).current;
 
   const completeOnboarding = async () => {
+    // Onboarding only marks the intro as seen; it does NOT authenticate.
+    // Always land on the index route, which shows login (or home if a session exists).
     try {
       await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
-      router.replace('/(tabs)/home');
+      router.replace('/');
     } catch (error) {
-      router.replace('/(tabs)/home');
+      router.replace('/');
     }
   };
 

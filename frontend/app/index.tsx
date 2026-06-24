@@ -81,7 +81,7 @@ export default function Index() {
   const [verificationCode, setVerificationCode] = useState('');
   const [resendDisabled, setResendDisabled] = useState(false);
   const [resendCountdown, setResendCountdown] = useState(0);
-  const countdownRef = useRef<NodeJS.Timeout | null>(null);
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     checkOnboardingStatus();
