@@ -82,15 +82,18 @@ export default function EditMedication() {
           setPatientName(patient.name);
           setName(medication.name);
           setDosage(medication.dosage);
+          let isInterval = false;
           const matchedOpt = FREQUENCY_OPTIONS.find(o => o.label === medication.frequency);
           if (matchedOpt) {
             setSelectedFreq(matchedOpt.value);
+            isInterval = matchedOpt.hours > 0 && matchedOpt.hours < 24;
           } else {
             setSelectedFreq('custom');
             const hoursMatch = medication.frequency.match(/^Cada (\d+) horas?$/);
             if (hoursMatch) {
               setCustomType('hours');
               setCustomHours(parseInt(hoursMatch[1], 10));
+              isInterval = true;
             } else {
               const dayParts = medication.frequency.split(', ');
               const days = dayParts.map((p: string) =>
@@ -102,7 +105,10 @@ export default function EditMedication() {
               }
             }
           }
-          setScheduleTimes(medication.schedule_times);
+          // Interval meds are stored as the full expanded set; collapse to a single
+          // base time so the edit screen shows one selector (re-expanded on save).
+          const loadedTimes = medication.schedule_times || [];
+          setScheduleTimes(isInterval && loadedTimes.length > 0 ? [loadedTimes[0]] : loadedTimes);
           setEndDate(medication.end_date || '');
           setInstructions(medication.instructions || '');
           setActive(medication.active);
@@ -199,6 +205,15 @@ export default function EditMedication() {
     return (freqOption && freqOption.hours > 0 && freqOption.hours < 24) ||
            (selectedFreq === 'custom' && customType === 'hours');
   };
+
+  // Interval mode uses a single base time. If the user switches into it while several
+  // exact times are present, collapse them so no contradictory state can be saved.
+  useEffect(() => {
+    if (loading) return;
+    if (shouldExpandInterval() && scheduleTimes.length > 1) {
+      setScheduleTimes(scheduleTimes.slice(0, 1));
+    }
+  }, [selectedFreq, customType]);
 
   const handleSave = async () => {
     if (!name || !dosage || !selectedFreq) {
@@ -361,11 +376,25 @@ export default function EditMedication() {
           <View style={styles.inputGroup}>
             <View style={styles.labelRow}>
               <Text style={styles.label}>{t('medications.schedule')} *</Text>
-              <TouchableOpacity onPress={addTimeSlot} style={styles.addTimeButton}>
-                <Ionicons name="add-circle" size={24} color="#2196F3" />
-                <Text style={styles.addTimeText}>{t('medications.addSchedule2')}</Text>
-              </TouchableOpacity>
+              {!shouldExpandInterval() && (
+                <TouchableOpacity onPress={addTimeSlot} style={styles.addTimeButton}>
+                  <Ionicons name="add-circle" size={24} color="#2196F3" />
+                  <Text style={styles.addTimeText}>{t('medications.addSchedule2')}</Text>
+                </TouchableOpacity>
+              )}
             </View>
+            {shouldExpandInterval() && (
+              <View style={styles.intervalHint}>
+                <Ionicons name="information-circle-outline" size={18} color="#1976D2" />
+                <Text style={styles.intervalHintText}>
+                  {t('medications.intervalHint', {
+                    hours: selectedFreq === 'custom'
+                      ? customHours
+                      : FREQUENCY_OPTIONS.find(f => f.value === selectedFreq)?.hours ?? 0,
+                  })}
+                </Text>
+              </View>
+            )}
             {scheduleTimes.map((time, index) => (
               <View key={index} style={styles.timeRow}>
                 <TouchableOpacity
@@ -493,6 +522,20 @@ const styles = StyleSheet.create({
     color: '#2196F3',
     marginLeft: 6,
     fontWeight: '500',
+  },
+  intervalHint: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#E3F2FD',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 12,
+    gap: 8,
+  },
+  intervalHintText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#1565C0',
   },
   timeRow: {
     flexDirection: 'row',

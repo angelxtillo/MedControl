@@ -201,6 +201,7 @@
     "schedule": "Schedule",
     "whatTime": "What time?",
     "addSchedule": "Add schedule",
+    "selectBaseTime": "Select base time",
     "noSchedules": "No schedules added yet",
     "dosage": "Dosage",
     "howMuch": "How much to take?",

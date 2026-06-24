@@ -201,6 +201,7 @@
     "schedule": "Horaire",
     "whatTime": "À quelle heure?",
     "addSchedule": "Ajouter un horaire",
+    "selectBaseTime": "Sélectionner l'heure de base",
     "noSchedules": "Aucun horaire ajouté",
     "dosage": "Dosage",
     "howMuch": "Combien prendre?",

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -135,6 +135,24 @@ export default function AddMedicationWizard() {
   const removeTime = (time: string) => {
     setScheduleTimes(scheduleTimes.filter(t => t !== time));
   };
+
+  // Interval mode ("cada N horas") uses a SINGLE base time; the rest of the day is
+  // generated automatically. Fixed-times mode allows multiple exact times.
+  const isIntervalMode = () => {
+    const freqOption = FREQUENCY_OPTIONS.find(f => f.value === frequency);
+    return (
+      (freqOption && freqOption.hours > 0 && freqOption.hours < 24) ||
+      (frequency === 'custom' && customType === 'hours')
+    );
+  };
+
+  // If the user switches into interval mode after having added several fixed times,
+  // collapse them to a single base time so no contradictory state can be saved.
+  useEffect(() => {
+    if (isIntervalMode() && scheduleTimes.length > 1) {
+      setScheduleTimes(scheduleTimes.slice(0, 1));
+    }
+  }, [frequency, customType]);
 
   // Returns Spanish string — stored as-is in MongoDB and matched on load
   const getFrequencyLabel = () => {
@@ -442,16 +460,20 @@ export default function AddMedicationWizard() {
             </View>
           )}
 
-          <TouchableOpacity
-            style={styles.addTimeButton}
-            onPress={() => {
-              setTempTime(new Date());
-              setShowTimePicker(true);
-            }}
-          >
-            <Ionicons name="add-circle" size={24} color="white" />
-            <Text style={styles.addTimeButtonText}>{t('medications.addSchedule')}</Text>
-          </TouchableOpacity>
+          {!(isFixedInterval && scheduleTimes.length >= 1) && (
+            <TouchableOpacity
+              style={styles.addTimeButton}
+              onPress={() => {
+                setTempTime(new Date());
+                setShowTimePicker(true);
+              }}
+            >
+              <Ionicons name="add-circle" size={24} color="white" />
+              <Text style={styles.addTimeButtonText}>
+                {isFixedInterval ? t('medications.selectBaseTime') : t('medications.addSchedule')}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {showTimePicker && (
