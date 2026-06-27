@@ -502,8 +502,8 @@ async def register(caregiver: CaregiverCreate, request: Request):
         "email": email,
         "code": code,
         "attempts": 0,
-        "created_at": datetime.now(timezone.utc),
-        "expires_at": datetime.now(timezone.utc) + timedelta(minutes=15)
+        "created_at": utc_now_naive(),
+        "expires_at": utc_now_naive() + timedelta(minutes=15)
     })
 
     # Send verification email
@@ -541,7 +541,7 @@ async def verify_email(data: VerifyEmailRequest, request: Request):
             raise HTTPException(status_code=429, detail="Demasiados intentos fallidos. Solicita un nuevo código.")
         raise HTTPException(status_code=400, detail="Código inválido")
 
-    if verification["expires_at"] < datetime.now(timezone.utc):
+    if verification["expires_at"] < utc_now_naive():
         raise HTTPException(status_code=400, detail="El código ha expirado. Solicita uno nuevo.")
 
     if verification.get("attempts", 0) >= 5:
@@ -587,7 +587,7 @@ async def resend_verification(data: ResendVerificationRequest, request: Request)
     )
 
     if last_verification:
-        time_since = datetime.now(timezone.utc) - last_verification["created_at"]
+        time_since = utc_now_naive() - last_verification["created_at"]
         if time_since < timedelta(minutes=1):
             raise HTTPException(status_code=429, detail="Espera 1 minuto antes de solicitar otro código.")
 
@@ -607,8 +607,8 @@ async def resend_verification(data: ResendVerificationRequest, request: Request)
         "email": email,
         "code": code,
         "attempts": 0,
-        "created_at": datetime.now(timezone.utc),
-        "expires_at": datetime.now(timezone.utc) + timedelta(minutes=15)
+        "created_at": utc_now_naive(),
+        "expires_at": utc_now_naive() + timedelta(minutes=15)
     })
 
     await send_verification_email(email, code)
@@ -1484,7 +1484,7 @@ async def invite_caregiver_by_code(
         if existing_id in patient.get("caregiver_ids", []):
             raise HTTPException(status_code=400, detail="Este usuario ya es cuidador de este paciente")
 
-    now = datetime.now(timezone.utc)
+    now = utc_now_naive()
 
     # Check for existing pending invitation (reuse code if still valid)
     existing_invitation = await db.invitations.find_one({
@@ -1541,7 +1541,7 @@ async def accept_invitation(
     if not invitation:
         raise HTTPException(status_code=404, detail="Código inválido. Verifica el código e inténtalo de nuevo.")
 
-    if invitation["expires_at"] < datetime.now(timezone.utc):
+    if invitation["expires_at"] < utc_now_naive():
         await db.invitations.update_one(
             {"_id": invitation["_id"]},
             {"$set": {"status": "expired"}}
