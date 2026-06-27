@@ -747,13 +747,23 @@ async def update_patient(
 
 @api_router.delete("/patients/{patient_id}")
 async def delete_patient(patient_id: str, user_id: str = Depends(get_current_user)):
-    result = await db.patients.delete_one({
+    patient = await db.patients.find_one({
         "_id": ObjectId(patient_id),
         "caregiver_ids": user_id
     })
-    if result.deleted_count == 0:
+    if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
-    
+
+    # Only the owner can delete the patient (and its cascade)
+    created_by = patient.get("created_by", patient.get("caregiver_ids", [None])[0])
+    if user_id != created_by:
+        raise HTTPException(
+            status_code=403,
+            detail="Solo el responsable principal puede eliminar el paciente. Usa 'Dejar de cuidar' para desvincularte."
+        )
+
+    await db.patients.delete_one({"_id": ObjectId(patient_id)})
+
     # Also delete related medications and logs
     await db.medications.delete_many({"patient_id": patient_id})
     await db.medication_logs.delete_many({"patient_id": patient_id})
@@ -803,7 +813,11 @@ async def remove_caregiver(
         raise HTTPException(status_code=404, detail="Patient not found")
     
     created_by = patient.get("created_by", patient.get("caregiver_ids", [None])[0])
-    
+
+    # Only the owner can remove caregivers
+    if user_id != created_by:
+        raise HTTPException(status_code=403, detail="Solo el responsable principal puede gestionar cuidadores")
+
     # Cannot remove the owner
     if caregiver_id == created_by:
         raise HTTPException(status_code=400, detail="No puedes eliminar al creador del paciente")
@@ -1124,13 +1138,23 @@ async def create_log(log: MedicationLogCreate, user_id: str = Depends(get_curren
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
 
+    # Verify the medication belongs to this patient (prevent cross-patient log tampering)
+    medication = await db.medications.find_one({
+        "_id": ObjectId(log.medication_id),
+        "patient_id": log.patient_id
+    })
+    if not medication:
+        raise HTTPException(status_code=404, detail="Medication not found")
+
     taken_dt = log.taken_datetime
     if log.status == "taken" and not taken_dt:
         taken_dt = datetime.now(timezone.utc).isoformat()
 
-    # Upsert: si ya existe log para (medication_id, scheduled_datetime), actualizar
+    # Upsert: si ya existe log para (medication_id, scheduled_datetime), actualizar.
+    # patient_id en el filtro como defensa adicional: nunca tocar el log de otro paciente.
     existing = await db.medication_logs.find_one({
         "medication_id": log.medication_id,
+        "patient_id": log.patient_id,
         "scheduled_datetime": log.scheduled_datetime
     })
 
@@ -1437,6 +1461,11 @@ async def invite_caregiver_by_code(
     })
     if not patient:
         raise HTTPException(status_code=404, detail="Paciente no encontrado o sin acceso")
+
+    # Only the owner can invite caregivers
+    created_by = patient.get("created_by", patient.get("caregiver_ids", [None])[0])
+    if user_id != created_by:
+        raise HTTPException(status_code=403, detail="Solo el responsable principal puede gestionar cuidadores")
 
     inviter = await db.caregivers.find_one({"_id": ObjectId(user_id)})
     if not inviter:
