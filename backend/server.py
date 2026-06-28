@@ -439,6 +439,10 @@ async def send_invitation_email(
 async def send_verification_email(to_email: str, code: str) -> bool:
     """Enviar código de verificación de email"""
     try:
+        logging.info(
+            f"[send_verification_email] Iniciando envío a {to_email} "
+            f"(from={SENDGRID_FROM_EMAIL!r}, api_key_set={bool(SENDGRID_API_KEY)})"
+        )
         sg = sendgrid.SendGridAPIClient(api_key=SENDGRID_API_KEY)
         html_content = f"""
         <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px;">
@@ -467,9 +471,22 @@ async def send_verification_email(to_email: str, code: str) -> bool:
             html_content=html_content
         )
         response = sg.send(message)
-        return response.status_code in [200, 202]
+        ok = response.status_code in [200, 202]
+        if ok:
+            logging.info(
+                f"[send_verification_email] SendGrid OK status={response.status_code} para {to_email}"
+            )
+        else:
+            logging.error(
+                f"[send_verification_email] SendGrid respuesta NO-OK status={response.status_code} "
+                f"para {to_email} body={getattr(response, 'body', None)!r}"
+            )
+        return ok
     except Exception as e:
-        print(f"SendGrid verification email error: {e}")
+        logging.error(
+            f"[send_verification_email] EXCEPCIÓN enviando a {to_email}: {e}",
+            exc_info=True,
+        )
         return False
 
 # ============= AUTH ENDPOINTS =============
@@ -507,7 +524,12 @@ async def register(caregiver: CaregiverCreate, request: Request):
     })
 
     # Send verification email
-    await send_verification_email(email, code)
+    logging.info(f"[register] Generado código de verificación para {email}; enviando email...")
+    sent = await send_verification_email(email, code)
+    if sent:
+        logging.info(f"[register] Email de verificación ENVIADO a {email}")
+    else:
+        logging.error(f"[register] FALLO al enviar email de verificación a {email}")
 
     return {
         "message": "Registro exitoso. Revisa tu correo para verificar tu cuenta.",

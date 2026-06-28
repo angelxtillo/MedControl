@@ -10,6 +10,7 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  AppState,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -28,6 +29,13 @@ import Animated, {
 
 const ONBOARDING_KEY = '@medcontrol_onboarding_complete';
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// El botón "Reenviar" se rehabilita 60s después de cada envío.
+const RESEND_COOLDOWN_MS = 60 * 1000;
+// El backend expira el código a los 15 min (server.py). El contador en pantalla
+// debe reflejar esta misma duración real, calculada contra un timestamp absoluto
+// para que NO se "pause" cuando la app pasa a segundo plano.
+const CODE_TTL_MS = 15 * 60 * 1000;
 
 function LoadingLogo() {
   const scale = useSharedValue(1);
@@ -79,9 +87,13 @@ export default function Index() {
   const [showVerification, setShowVerification] = useState(false);
   const [verificationEmail, setVerificationEmail] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
-  const [resendDisabled, setResendDisabled] = useState(false);
-  const [resendCountdown, setResendCountdown] = useState(0);
-  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Timestamps absolutos (epoch ms): la fuente de verdad del tiempo restante.
+  // El tick solo refresca `nowTs` para re-renderizar; el tiempo real se deriva
+  // de estos timestamps, así que minimizar la app no "pausa" la cuenta.
+  const [resendAvailableAt, setResendAvailableAt] = useState<number | null>(null);
+  const [codeExpiresAt, setCodeExpiresAt] = useState<number | null>(null);
+  const [nowTs, setNowTs] = useState<number>(() => Date.now());
+  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     checkOnboardingStatus();
@@ -108,25 +120,40 @@ export default function Index() {
     }
   };
 
+  // Mientras la pantalla de verificación está activa, refrescamos `nowTs` cada
+  // segundo y, sobre todo, al volver de segundo plano (AppState 'active'), para
+  // recalcular el tiempo restante REAL inmediatamente al regresar de Gmail.
   useEffect(() => {
+    if (!showVerification) return;
+    const update = () => setNowTs(Date.now());
+    update();
+    tickRef.current = setInterval(update, 1000);
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') update();
+    });
     return () => {
-      if (countdownRef.current) clearInterval(countdownRef.current);
+      if (tickRef.current) clearInterval(tickRef.current);
+      sub.remove();
     };
-  }, []);
+  }, [showVerification]);
 
-  const startResendCountdown = () => {
-    setResendDisabled(true);
-    setResendCountdown(60);
-    countdownRef.current = setInterval(() => {
-      setResendCountdown((prev) => {
-        if (prev <= 1) {
-          if (countdownRef.current) clearInterval(countdownRef.current);
-          setResendDisabled(false);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+  // Llamar cada vez que el backend emite un código nuevo (registro o reenvío):
+  // arma el cooldown del botón y el contador de expiración real (15 min).
+  const onCodeIssued = () => {
+    const now = Date.now();
+    setNowTs(now);
+    setResendAvailableAt(now + RESEND_COOLDOWN_MS);
+    setCodeExpiresAt(now + CODE_TTL_MS);
+  };
+
+  // Para entradas donde NO emitimos un código nuevo (p. ej. login con email sin
+  // verificar): solo armamos el cooldown del botón, sin contador de expiración
+  // porque no sabemos cuándo expira el código pendiente.
+  const armResendCooldownOnly = () => {
+    const now = Date.now();
+    setNowTs(now);
+    setResendAvailableAt(now + RESEND_COOLDOWN_MS);
+    setCodeExpiresAt(null);
   };
 
   const validateEmail = (emailToCheck: string): boolean => {
@@ -155,7 +182,7 @@ export default function Index() {
         if (result.requiresVerification && result.email) {
           setVerificationEmail(result.email);
           setShowVerification(true);
-          startResendCountdown();
+          onCodeIssued();
         } else {
           router.replace('/(tabs)/home');
         }
@@ -164,7 +191,7 @@ export default function Index() {
       if (error.message?.includes('no verificado') || error.message?.includes('Email no verificado')) {
         setVerificationEmail(trimmedEmail);
         setShowVerification(true);
-        startResendCountdown();
+        armResendCooldownOnly();
       } else {
         Alert.alert('Error', error.message);
       }
@@ -191,13 +218,13 @@ export default function Index() {
   };
 
   const handleResendCode = async () => {
-    if (resendDisabled) return;
+    if (resendAvailableAt != null && Date.now() < resendAvailableAt) return;
 
     setLoading(true);
     try {
       await resendVerification(verificationEmail);
       Alert.alert(t('common.success'), t('auth.codeSent'));
-      startResendCountdown();
+      onCodeIssued();
     } catch (error: any) {
       Alert.alert('Error', error.message);
     } finally {
@@ -219,6 +246,17 @@ export default function Index() {
 
   // Pantalla de verificación de email
   if (showVerification) {
+    // Tiempo restante derivado de timestamps absolutos contra `nowTs`.
+    const resendRemainingMs = resendAvailableAt ? Math.max(0, resendAvailableAt - nowTs) : 0;
+    const resendDisabled = resendRemainingMs > 0;
+    const resendCountdown = Math.ceil(resendRemainingMs / 1000);
+
+    const expiryRemainingMs = codeExpiresAt ? Math.max(0, codeExpiresAt - nowTs) : 0;
+    const codeExpired = codeExpiresAt != null && expiryRemainingMs <= 0;
+    const expiryMinutes = Math.floor(expiryRemainingMs / 60000);
+    const expirySeconds = Math.floor((expiryRemainingMs % 60000) / 1000);
+    const expiryLabel = `${expiryMinutes}:${expirySeconds.toString().padStart(2, '0')}`;
+
     return (
       <SafeAreaView style={styles.container}>
         <KeyboardAvoidingView
@@ -238,6 +276,14 @@ export default function Index() {
               <Text style={styles.verificationInfo}>
                 {t('auth.verifyEmailInfo', { email: verificationEmail })}
               </Text>
+
+              {codeExpiresAt != null && (
+                <Text style={[styles.expiryInfo, codeExpired && styles.expiryInfoExpired]}>
+                  {codeExpired
+                    ? t('auth.codeExpiredResend')
+                    : t('auth.codeExpiresIn', { time: expiryLabel })}
+                </Text>
+              )}
 
               <View style={styles.inputContainer}>
                 <Ionicons name="key-outline" size={20} color="#666" style={styles.inputIcon} />
@@ -499,8 +545,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: 12,
     lineHeight: 22,
+  },
+  expiryInfo: {
+    fontSize: 13,
+    color: '#999',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  expiryInfoExpired: {
+    color: '#E53935',
+    fontWeight: '600',
   },
   codeInput: {
     letterSpacing: 4,

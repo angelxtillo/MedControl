@@ -51,6 +51,8 @@
     "resendCode": "Reenviar código",
     "resendIn": "Reenviar em {{seconds}}s",
     "codeSent": "Código enviado. Verifique seu e-mail.",
+    "codeExpiresIn": "O código expira em {{time}}",
+    "codeExpiredResend": "O código expirou. Solicite um novo.",
     "backToLogin": "← Voltar ao login"
   },
   "onboarding": {

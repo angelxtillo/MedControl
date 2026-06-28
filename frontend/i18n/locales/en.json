@@ -51,6 +51,8 @@
     "resendCode": "Resend code",
     "resendIn": "Resend in {{seconds}}s",
     "codeSent": "Code sent. Check your email.",
+    "codeExpiresIn": "The code expires in {{time}}",
+    "codeExpiredResend": "The code expired. Request a new one.",
     "backToLogin": "← Back to login"
   },
   "onboarding": {
