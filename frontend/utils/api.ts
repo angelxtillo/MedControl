@@ -12,7 +12,7 @@ const api = axios.create({
   timeout: 60000,
 });
 
-// Invoked when an authenticated request returns 401/403 (token missing/expired).
+// Invoked when an authenticated request returns 401 (token missing/expired/invalid).
 // AuthContext registers a handler that clears the in-memory session so the route
 // guards redirect to login. Kept as a registry to avoid importing React here.
 let onUnauthorized: (() => void) | null = null;
@@ -37,9 +37,12 @@ api.interceptors.response.use(
       console.error('Request timeout');
     }
     const status = error?.response?.status;
-    if (status === 401 || status === 403) {
-      // Token missing/expired/invalid: drop the stored session and let the
-      // registered handler clear app state so the guards redirect to login.
+    // Solo 401 = sesión inválida (token ausente/expirado/inválido) → cerrar sesión
+    // y redirigir a login. Un 403 significa "autenticado pero sin permiso para
+    // ESTA acción" (p. ej. solo el dueño puede gestionar cuidadores): la sesión
+    // es válida, así que NO cerramos sesión; dejamos que el error se propague
+    // para que la pantalla muestre su mensaje y el usuario permanezca donde está.
+    if (status === 401) {
       await AsyncStorage.removeItem('token');
       await AsyncStorage.removeItem('user');
       onUnauthorized?.();

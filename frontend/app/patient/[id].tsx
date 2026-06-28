@@ -28,6 +28,7 @@ interface Patient {
   age?: number;
   photo?: string;
   notes?: string;
+  is_owner?: boolean;
 }
 
 interface Medication {
@@ -103,8 +104,41 @@ export default function PatientDetail() {
               await api.delete(`/patients/${id}`);
               Alert.alert(t('common.success'), t('medications.patientDeleted'));
               router.back();
-            } catch (error) {
-              Alert.alert(t('common.error'), t('medications.errorDeletePatient'));
+            } catch (error: any) {
+              // 403 = autenticado pero sin permiso (no es el dueño). La sesión
+              // sigue válida (el interceptor ya no expulsa en 403); mostramos un
+              // mensaje claro de quién sí puede eliminar.
+              if (error?.response?.status === 403) {
+                Alert.alert(t('common.error'), t('patients.onlyOwnerCanDelete'));
+              } else {
+                Alert.alert(t('common.error'), t('medications.errorDeletePatient'));
+              }
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // Solo para cuidadores NO-dueños: desvincularse del paciente (el backend
+  // bloquea al dueño con 400). El dueño usa "Borrar paciente" en su lugar.
+  const handleLeavePatient = () => {
+    Alert.alert(
+      t('patients.leavePatient'),
+      t('patients.leaveConfirm', { name: patient?.name ?? '' }),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('patients.leavePatient'),
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await api.post(`/patients/${id}/leave`);
+              Alert.alert(t('common.success'), t('patients.leftPatient'));
+              router.back();
+            } catch (error: any) {
+              const message = error?.response?.data?.detail || t('patients.errorLeave');
+              Alert.alert(t('common.error'), message);
             }
           },
         },
@@ -238,17 +272,26 @@ export default function PatientDetail() {
               <Ionicons name="pencil-outline" size={20} color="#2196F3" />
               <Text style={styles.editPatientText}>{t('common.edit')}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.deletePatientButton} onPress={handleDeletePatient}>
-              <Ionicons name="trash-outline" size={20} color="#f44336" />
-              <Text style={styles.deletePatientText}>{t('common.delete')}</Text>
-            </TouchableOpacity>
+            {/* Solo el dueño ve "Borrar"; los no-dueños ven "Dejar de cuidar". */}
+            {patient.is_owner ? (
+              <TouchableOpacity style={styles.deletePatientButton} onPress={handleDeletePatient}>
+                <Ionicons name="trash-outline" size={20} color="#f44336" />
+                <Text style={styles.deletePatientText}>{t('common.delete')}</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={styles.deletePatientButton} onPress={handleLeavePatient}>
+                <Ionicons name="exit-outline" size={20} color="#f44336" />
+                <Text style={styles.deletePatientText}>{t('patients.leavePatient')}</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 
         {/* Sección de Cuidadores */}
-        <CaregiversManager 
-          patientId={id as string} 
+        <CaregiversManager
+          patientId={id as string}
           patientName={patient.name}
+          isOwner={!!patient.is_owner}
           onCaregiversChange={loadPatientData}
         />
 

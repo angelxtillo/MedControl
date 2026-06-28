@@ -27,12 +27,14 @@ interface Caregiver {
 interface CaregiversManagerProps {
   patientId: string;
   patientName: string;
+  isOwner: boolean;
   onCaregiversChange?: () => void;
 }
 
 export default function CaregiversManager({
   patientId,
   patientName,
+  isOwner,
   onCaregiversChange
 }: CaregiversManagerProps) {
   const { t } = useTranslation();
@@ -75,8 +77,13 @@ export default function CaregiversManager({
       setInviteEmail('');
       setModalVisible(false);
     } catch (error: any) {
-      const message = error.response?.data?.detail || 'No se pudo enviar la invitación';
-      Alert.alert(t('common.error'), message);
+      // 403 = no es el dueño: sesión válida, solo sin permiso. Mensaje i18n claro.
+      if (error?.response?.status === 403) {
+        Alert.alert(t('common.error'), t('caregivers.onlyOwnerCanManage'));
+      } else {
+        const message = error.response?.data?.detail || t('caregivers.inviteError');
+        Alert.alert(t('common.error'), message);
+      }
     } finally {
       setInviting(false);
     }
@@ -103,8 +110,12 @@ export default function CaregiversManager({
               loadCaregivers();
               onCaregiversChange?.();
             } catch (error: any) {
-              const message = error.response?.data?.detail || t('common.errorDelete');
-              Alert.alert(t('common.error'), message);
+              if (error?.response?.status === 403) {
+                Alert.alert(t('common.error'), t('caregivers.onlyOwnerCanManage'));
+              } else {
+                const message = error.response?.data?.detail || t('common.errorDelete');
+                Alert.alert(t('common.error'), message);
+              }
             }
           },
         },
@@ -127,7 +138,8 @@ export default function CaregiversManager({
         </Text>
         <Text style={styles.caregiverEmail}>{item.email}</Text>
       </View>
-      {!item.is_owner && (
+      {/* Solo el dueño puede expulsar cuidadores (y nunca a sí mismo). */}
+      {isOwner && !item.is_owner && (
         <TouchableOpacity
           style={styles.removeButton}
           onPress={() => handleRemove(item)}
@@ -153,13 +165,16 @@ export default function CaregiversManager({
           <Ionicons name="people" size={20} color="#2196F3" />
           <Text style={styles.headerTitle}>{t('caregivers.title')} ({caregivers.length})</Text>
         </View>
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => setModalVisible(true)}
-        >
-          <Ionicons name="person-add" size={18} color="white" />
-          <Text style={styles.addButtonText}>{t('common.add')}</Text>
-        </TouchableOpacity>
+        {/* Solo el dueño puede invitar cuidadores. */}
+        {isOwner && (
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={() => setModalVisible(true)}
+          >
+            <Ionicons name="person-add" size={18} color="white" />
+            <Text style={styles.addButtonText}>{t('common.add')}</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <FlatList
