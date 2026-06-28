@@ -38,7 +38,10 @@ db = client[os.environ['DB_NAME']]
 
 # Security
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-security = HTTPBearer()
+# auto_error=False: si falta el header Authorization, NO lanzamos el 403 por
+# defecto de HTTPBearer. Lo tratamos en get_current_user como 401, dejando 403
+# reservado exclusivamente para "autenticado pero sin permiso".
+security = HTTPBearer(auto_error=False)
 ALGORITHM = "HS256"
 SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY", "")
 SENDGRID_FROM_EMAIL = os.environ.get("SENDGRID_FROM_EMAIL", "")
@@ -346,7 +349,9 @@ def normalize_email(email: str) -> str:
     """Normalizar email: strip + lowercase"""
     return email.strip().lower()
 
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+async def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)):
+    if credentials is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
     try:
         token = credentials.credentials
         payload = jwt.decode(token, JWT_SECRET, algorithms=[ALGORITHM])
@@ -700,18 +705,23 @@ async def get_patients(user_id: str = Depends(get_current_user)):
         {"caregiver_ids": user_id},
         {"password_hash": 0}  # Exclude sensitive fields
     ).to_list(100)
-    return [
-        {
+    result = []
+    for p in patients:
+        # Dueño = created_by; fallback a primer cuidador para pacientes legacy
+        # sin created_by (misma lógica que delete_patient/leave_patient).
+        created_by = p.get("created_by", (p.get("caregiver_ids") or [None])[0])
+        result.append({
             "id": str(p["_id"]),
             "name": p["name"],
             "age": p.get("age"),
             "photo": p.get("photo"),
             "notes": p.get("notes"),
             "caregiver_ids": p.get("caregiver_ids", []),
+            "created_by": created_by,
+            "is_owner": user_id == created_by,
             "created_at": p["created_at"].isoformat()
-        }
-        for p in patients
-    ]
+        })
+    return result
 
 @api_router.post("/patients")
 async def create_patient(patient: PatientCreate, user_id: str = Depends(get_current_user)):
