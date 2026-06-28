@@ -237,6 +237,12 @@ export async function cancelMedicationNotifications(medId: string): Promise<void
   }
 }
 
+// Cancela TODAS las notificaciones programadas. Se usa al cerrar sesión / borrar
+// cuenta para que los recordatorios de una cuenta no suenen en la siguiente.
+export async function cancelAllScheduledNotifications(): Promise<void> {
+  await Notifications.cancelAllScheduledNotificationsAsync();
+}
+
 export async function syncAllMedicationNotifications(
   meds: MedicationForSchedule[],
 ): Promise<void> {

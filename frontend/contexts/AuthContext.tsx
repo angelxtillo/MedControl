@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import Constants from 'expo-constants';
 import { setUnauthorizedHandler } from '../utils/api';
+import { cancelAllScheduledNotifications } from '../utils/notifications';
 
 const API_URL = Constants.expoConfig?.extra?.EXPO_PUBLIC_BACKEND_URL || process.env.EXPO_PUBLIC_BACKEND_URL;
 
@@ -45,6 +46,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // redirect to login automatically once `user` becomes null.
   useEffect(() => {
     setUnauthorizedHandler(() => {
+      // Sesión expirada/invalidada: cancelar notificaciones y forzar re-sync limpio
+      // en el próximo login para que no se filtren a otra cuenta.
+      cancelAllScheduledNotifications().catch((e) =>
+        console.warn('No se pudieron cancelar las notificaciones al expirar la sesión:', e),
+      );
+      AsyncStorage.removeItem('lastReconcile').catch(() => {});
       setToken(null);
       setUser(null);
     });
@@ -148,6 +155,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = async () => {
+    // Cancelar las notificaciones locales antes de limpiar la sesión para que los
+    // recordatorios de esta cuenta no sigan sonando tras salir / entrar a otra.
+    try {
+      await cancelAllScheduledNotifications();
+    } catch (e) {
+      console.warn('No se pudieron cancelar las notificaciones al cerrar sesión:', e);
+    }
     if (user?.id) {
       await AsyncStorage.removeItem(`dashboard:${user.id}`);
     }
@@ -166,6 +180,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         data: { password },
         timeout: 60000,
       });
+      try {
+        await cancelAllScheduledNotifications();
+      } catch (e) {
+        console.warn('No se pudieron cancelar las notificaciones al eliminar la cuenta:', e);
+      }
+      await AsyncStorage.removeItem('lastReconcile');
       await AsyncStorage.removeItem('token');
       await AsyncStorage.removeItem('user');
       setToken(null);
