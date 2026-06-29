@@ -61,6 +61,11 @@ user_action_rate_limit_store = defaultdict(list)
 USER_ACTION_RATE_LIMIT = 3
 USER_ACTION_WINDOW = 3600  # 1 hora
 
+# Validez del código de verificación de email. Fuente de verdad: el backend
+# fija expires_at con esto y además lo expone (code_expires_in_seconds) para que
+# el frontend muestre un contador alineado, sin hardcodear su propio valor.
+EMAIL_CODE_TTL_MINUTES = 10
+
 def get_client_ip(request: Request) -> str:
     """Obtener IP real del cliente considerando proxies (Render)"""
     forwarded = request.headers.get("x-forwarded-for")
@@ -77,14 +82,26 @@ def check_rate_limit(ip: str, limit: int = RATE_LIMIT_REQUESTS, window: int = RA
     rate_limit_store[ip].append(now)
     return True
 
-def check_auth_rate_limit(ip: str) -> bool:
-    """Rate limiting estricto para auth endpoints (5 por 15 min)"""
+def check_auth_rate_limit(ip: str) -> int:
+    """Rate limiting estricto para auth (5 intentos por ventana deslizante de 15
+    min). Devuelve 0 si se permite (registrando el intento) o los SEGUNDOS REALES
+    que faltan para reintentar si está bloqueado. El bloqueo dura solo hasta que
+    el intento más antiguo sale de la ventana, no 15 min fijos."""
     now = time.time()
-    auth_rate_limit_store[ip] = [t for t in auth_rate_limit_store[ip] if now - t < AUTH_RATE_LIMIT_WINDOW]
-    if len(auth_rate_limit_store[ip]) >= AUTH_RATE_LIMIT_REQUESTS:
-        return False
-    auth_rate_limit_store[ip].append(now)
-    return True
+    times = [t for t in auth_rate_limit_store[ip] if now - t < AUTH_RATE_LIMIT_WINDOW]
+    auth_rate_limit_store[ip] = times
+    if len(times) >= AUTH_RATE_LIMIT_REQUESTS:
+        retry_after = int(AUTH_RATE_LIMIT_WINDOW - (now - min(times))) + 1
+        return max(retry_after, 1)
+    times.append(now)
+    return 0
+
+def rate_limit_message(retry_after: int) -> str:
+    """Mensaje veraz acorde al tiempo de bloqueo real."""
+    if retry_after >= 60:
+        minutos = (retry_after + 59) // 60
+        return f"Demasiados intentos. Espera {minutos} minuto{'s' if minutos != 1 else ''} antes de reintentar."
+    return f"Demasiados intentos. Espera {retry_after} segundos antes de reintentar."
 
 def check_user_action_rate_limit(user_id: str, action: str) -> bool:
     """Rate limiting por usuario para acciones sensibles (3 por hora)"""
@@ -464,7 +481,7 @@ async def send_verification_email(to_email: str, code: str) -> bool:
               <p style="color: #666; margin: 0 0 8px 0; font-size: 14px;">Tu código de verificación</p>
               <h1 style="color: #1565C0; margin: 0; font-size: 36px; letter-spacing: 8px;">{code}</h1>
             </div>
-            <p style="color: #999; font-size: 12px; text-align: center;">Este código expira en 15 minutos.</p>
+            <p style="color: #999; font-size: 12px; text-align: center;">Este código expira en {EMAIL_CODE_TTL_MINUTES} minutos.</p>
             <p style="color: #999; font-size: 12px; text-align: center;">Si no solicitaste este código, puedes ignorar este email.</p>
           </div>
         </div>
@@ -498,8 +515,13 @@ async def send_verification_email(to_email: str, code: str) -> bool:
 @api_router.post("/auth/register")
 async def register(caregiver: CaregiverCreate, request: Request):
     ip = get_client_ip(request)
-    if not check_auth_rate_limit(ip):
-        raise HTTPException(status_code=429, detail="Demasiados intentos. Espera 15 minutos.")
+    retry_after = check_auth_rate_limit(ip)
+    if retry_after:
+        raise HTTPException(
+            status_code=429,
+            detail=rate_limit_message(retry_after),
+            headers={"Retry-After": str(retry_after)},
+        )
 
     email = normalize_email(caregiver.email)
 
@@ -525,7 +547,7 @@ async def register(caregiver: CaregiverCreate, request: Request):
         "code": code,
         "attempts": 0,
         "created_at": utc_now_naive(),
-        "expires_at": utc_now_naive() + timedelta(minutes=15)
+        "expires_at": utc_now_naive() + timedelta(minutes=EMAIL_CODE_TTL_MINUTES)
     })
 
     # Send verification email
@@ -539,14 +561,20 @@ async def register(caregiver: CaregiverCreate, request: Request):
     return {
         "message": "Registro exitoso. Revisa tu correo para verificar tu cuenta.",
         "email": email,
-        "requires_verification": True
+        "requires_verification": True,
+        "code_expires_in_seconds": EMAIL_CODE_TTL_MINUTES * 60
     }
 
 @api_router.post("/auth/verify-email")
 async def verify_email(data: VerifyEmailRequest, request: Request):
     ip = get_client_ip(request)
-    if not check_auth_rate_limit(ip):
-        raise HTTPException(status_code=429, detail="Demasiados intentos. Espera 15 minutos.")
+    retry_after = check_auth_rate_limit(ip)
+    if retry_after:
+        raise HTTPException(
+            status_code=429,
+            detail=rate_limit_message(retry_after),
+            headers={"Retry-After": str(retry_after)},
+        )
 
     email = normalize_email(data.email)
     code = data.code.strip().upper()
@@ -602,8 +630,13 @@ async def verify_email(data: VerifyEmailRequest, request: Request):
 @api_router.post("/auth/resend-verification")
 async def resend_verification(data: ResendVerificationRequest, request: Request):
     ip = get_client_ip(request)
-    if not check_auth_rate_limit(ip):
-        raise HTTPException(status_code=429, detail="Demasiados intentos. Espera 15 minutos.")
+    retry_after = check_auth_rate_limit(ip)
+    if retry_after:
+        raise HTTPException(
+            status_code=429,
+            detail=rate_limit_message(retry_after),
+            headers={"Retry-After": str(retry_after)},
+        )
 
     email = normalize_email(data.email)
 
@@ -635,18 +668,26 @@ async def resend_verification(data: ResendVerificationRequest, request: Request)
         "code": code,
         "attempts": 0,
         "created_at": utc_now_naive(),
-        "expires_at": utc_now_naive() + timedelta(minutes=15)
+        "expires_at": utc_now_naive() + timedelta(minutes=EMAIL_CODE_TTL_MINUTES)
     })
 
     await send_verification_email(email, code)
 
-    return {"message": "Código enviado. Revisa tu correo."}
+    return {
+        "message": "Código enviado. Revisa tu correo.",
+        "code_expires_in_seconds": EMAIL_CODE_TTL_MINUTES * 60
+    }
 
 @api_router.post("/auth/login")
 async def login(credentials: CaregiverLogin, request: Request):
     ip = get_client_ip(request)
-    if not check_auth_rate_limit(ip):
-        raise HTTPException(status_code=429, detail="Demasiados intentos. Espera 15 minutos.")
+    retry_after = check_auth_rate_limit(ip)
+    if retry_after:
+        raise HTTPException(
+            status_code=429,
+            detail=rate_limit_message(retry_after),
+            headers={"Retry-After": str(retry_after)},
+        )
 
     email = normalize_email(credentials.email)
     user = await db.caregivers.find_one({"email": email})
