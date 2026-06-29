@@ -141,7 +141,12 @@
     "additionalNotes": "Additional notes",
     "saving": "Saving...",
     "validAge": "Enter a valid age",
-    "patientDetail": "Patient Detail"
+    "patientDetail": "Patient Detail",
+    "onlyOwnerCanDelete": "Only the primary caregiver (who created the patient) can delete the patient.",
+    "leavePatient": "Stop caring",
+    "leaveConfirm": "Are you sure you want to stop caring for {{name}}? You will lose access to this patient.",
+    "leftPatient": "You have stopped caring for this patient",
+    "errorLeave": "Could not stop caring for the patient"
   },
   "caregivers": {
     "title": "Caregivers",
@@ -231,11 +236,6 @@
     "deleted": "Medication deleted",
     "errorDelete": "Could not delete medication",
     "patientDeleted": "Patient deleted",
-    "onlyOwnerCanDelete": "Only the primary caregiver (who created the patient) can delete the patient.",
-    "leavePatient": "Stop caring",
-    "leaveConfirm": "Are you sure you want to stop caring for {{name}}? You will lose access to this patient.",
-    "leftPatient": "You have stopped caring for this patient",
-    "errorLeave": "Could not stop caring for the patient",
     "errorDeletePatient": "Could not delete patient",
     "errorUpdateStatus": "Could not update status",
     "errorUpdateNotifications": "Could not update notifications",

@@ -141,7 +141,12 @@
     "additionalNotes": "Notas adicionales",
     "saving": "Guardando...",
     "validAge": "Ingresa una edad válida",
-    "patientDetail": "Detalle del Paciente"
+    "patientDetail": "Detalle del Paciente",
+    "onlyOwnerCanDelete": "Solo el responsable principal (quien creó el paciente) puede eliminar al paciente.",
+    "leavePatient": "Dejar de cuidar",
+    "leaveConfirm": "¿Seguro que quieres dejar de cuidar a {{name}}? Perderás el acceso a este paciente.",
+    "leftPatient": "Has dejado de cuidar a este paciente",
+    "errorLeave": "No se pudo dejar de cuidar al paciente"
   },
   "caregivers": {
     "title": "Cuidadores",
@@ -231,11 +236,6 @@
     "deleted": "Medicamento eliminado",
     "errorDelete": "No se pudo eliminar el medicamento",
     "patientDeleted": "Paciente eliminado",
-    "onlyOwnerCanDelete": "Solo el responsable principal (quien creó el paciente) puede eliminar al paciente.",
-    "leavePatient": "Dejar de cuidar",
-    "leaveConfirm": "¿Seguro que quieres dejar de cuidar a {{name}}? Perderás el acceso a este paciente.",
-    "leftPatient": "Has dejado de cuidar a este paciente",
-    "errorLeave": "No se pudo dejar de cuidar al paciente",
     "errorDeletePatient": "No se pudo eliminar el paciente",
     "errorUpdateStatus": "No se pudo actualizar el estado",
     "errorUpdateNotifications": "No se pudieron actualizar las notificaciones",

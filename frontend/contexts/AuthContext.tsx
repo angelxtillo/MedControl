@@ -16,6 +16,7 @@ interface User {
 interface RegisterResult {
   requiresVerification: boolean;
   email?: string;
+  codeExpiresInSeconds?: number;
 }
 
 interface AuthContextType {
@@ -24,7 +25,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<RegisterResult>;
   verifyEmail: (email: string, code: string) => Promise<void>;
-  resendVerification: (email: string) => Promise<void>;
+  resendVerification: (email: string) => Promise<number | undefined>;
   logout: () => Promise<void>;
   deleteAccount: (password: string) => Promise<void>;
   loading: boolean;
@@ -114,7 +115,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }, { timeout: 60000 });
 
       if (response.data.requires_verification) {
-        return { requiresVerification: true, email: normalizedEmail };
+        return {
+          requiresVerification: true,
+          email: normalizedEmail,
+          codeExpiresInSeconds: response.data.code_expires_in_seconds,
+        };
       }
 
       const { token: newToken, user: newUser } = response.data;
@@ -144,11 +149,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const resendVerification = async (email: string) => {
+  const resendVerification = async (email: string): Promise<number | undefined> => {
     try {
-      await axios.post(`${API_URL}/api/auth/resend-verification`, {
+      const response = await axios.post(`${API_URL}/api/auth/resend-verification`, {
         email: email.trim().toLowerCase(),
       }, { timeout: 60000 });
+      return response.data?.code_expires_in_seconds;
     } catch (error: any) {
       throw new Error(error.response?.data?.detail || 'No se pudo reenviar el código');
     }

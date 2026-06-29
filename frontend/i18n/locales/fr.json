@@ -141,7 +141,12 @@
     "additionalNotes": "Notes supplémentaires",
     "saving": "Enregistrement...",
     "validAge": "Entrez un âge valide",
-    "patientDetail": "Détail du Patient"
+    "patientDetail": "Détail du Patient",
+    "onlyOwnerCanDelete": "Seul le responsable principal (qui a créé le patient) peut supprimer le patient.",
+    "leavePatient": "Arrêter de suivre",
+    "leaveConfirm": "Voulez-vous vraiment arrêter de suivre {{name}} ? Vous perdrez l'accès à ce patient.",
+    "leftPatient": "Vous avez arrêté de suivre ce patient",
+    "errorLeave": "Impossible d'arrêter de suivre le patient"
   },
   "caregivers": {
     "title": "Soignants",
@@ -231,11 +236,6 @@
     "deleted": "Médicament supprimé",
     "errorDelete": "Impossible de supprimer le médicament",
     "patientDeleted": "Patient supprimé",
-    "onlyOwnerCanDelete": "Seul le responsable principal (qui a créé le patient) peut supprimer le patient.",
-    "leavePatient": "Arrêter de suivre",
-    "leaveConfirm": "Voulez-vous vraiment arrêter de suivre {{name}} ? Vous perdrez l'accès à ce patient.",
-    "leftPatient": "Vous avez arrêté de suivre ce patient",
-    "errorLeave": "Impossible d'arrêter de suivre le patient",
     "errorDeletePatient": "Impossible de supprimer le patient",
     "errorUpdateStatus": "Impossible de mettre à jour le statut",
     "errorUpdateNotifications": "Impossible de mettre à jour les notifications",

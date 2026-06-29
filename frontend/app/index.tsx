@@ -32,10 +32,11 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // El botón "Reenviar" se rehabilita 60s después de cada envío.
 const RESEND_COOLDOWN_MS = 60 * 1000;
-// El backend expira el código a los 15 min (server.py). El contador en pantalla
-// debe reflejar esta misma duración real, calculada contra un timestamp absoluto
-// para que NO se "pause" cuando la app pasa a segundo plano.
-const CODE_TTL_MS = 15 * 60 * 1000;
+// Fuente de verdad de la expiración: el backend devuelve code_expires_in_seconds.
+// Este valor solo es un fallback por si una respuesta antigua no lo trae; debe
+// coincidir con EMAIL_CODE_TTL_MINUTES del backend (10 min). El contador se
+// calcula contra un timestamp absoluto para no pausarse en segundo plano.
+const DEFAULT_CODE_TTL_SECONDS = 10 * 60;
 
 function LoadingLogo() {
   const scale = useSharedValue(1);
@@ -138,12 +139,16 @@ export default function Index() {
   }, [showVerification]);
 
   // Llamar cada vez que el backend emite un código nuevo (registro o reenvío):
-  // arma el cooldown del botón y el contador de expiración real (15 min).
-  const onCodeIssued = () => {
+  // arma el cooldown del botón y el contador de expiración real, usando la
+  // duración que indica el backend (alineada: backend y frontend, mismo valor).
+  const onCodeIssued = (expiresInSeconds?: number) => {
+    const ttl = (expiresInSeconds && expiresInSeconds > 0)
+      ? expiresInSeconds
+      : DEFAULT_CODE_TTL_SECONDS;
     const now = Date.now();
     setNowTs(now);
     setResendAvailableAt(now + RESEND_COOLDOWN_MS);
-    setCodeExpiresAt(now + CODE_TTL_MS);
+    setCodeExpiresAt(now + ttl * 1000);
   };
 
   // Para entradas donde NO emitimos un código nuevo (p. ej. login con email sin
@@ -182,7 +187,7 @@ export default function Index() {
         if (result.requiresVerification && result.email) {
           setVerificationEmail(result.email);
           setShowVerification(true);
-          onCodeIssued();
+          onCodeIssued(result.codeExpiresInSeconds);
         } else {
           router.replace('/(tabs)/home');
         }
@@ -193,7 +198,7 @@ export default function Index() {
         setShowVerification(true);
         armResendCooldownOnly();
       } else {
-        Alert.alert('Error', error.message);
+        Alert.alert(t('common.error'), error.message);
       }
     } finally {
       setLoading(false);
@@ -211,7 +216,7 @@ export default function Index() {
       await verifyEmail(verificationEmail, verificationCode);
       router.replace('/(tabs)/home');
     } catch (error: any) {
-      Alert.alert('Error', error.message);
+      Alert.alert(t('common.error'), error.message);
     } finally {
       setLoading(false);
     }
@@ -222,11 +227,11 @@ export default function Index() {
 
     setLoading(true);
     try {
-      await resendVerification(verificationEmail);
+      const expiresInSeconds = await resendVerification(verificationEmail);
       Alert.alert(t('common.success'), t('auth.codeSent'));
-      onCodeIssued();
+      onCodeIssued(expiresInSeconds);
     } catch (error: any) {
-      Alert.alert('Error', error.message);
+      Alert.alert(t('common.error'), error.message);
     } finally {
       setLoading(false);
     }
