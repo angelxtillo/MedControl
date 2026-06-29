@@ -22,6 +22,7 @@ import sendgrid
 from sendgrid.helpers.mail import Mail
 import random
 import string
+import httpx
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -998,6 +999,81 @@ async def get_patient_caregiver_tokens(patient_id: str) -> List[str]:
     ).to_list(1000)
     # Set para deduplicar por si dos cuidadores comparten un token improbable.
     return list({d["token"] for d in devices})
+
+EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
+
+async def send_push_to_tokens(
+    tokens: List[str],
+    title: str,
+    body: str,
+    data: Optional[dict] = None,
+) -> dict:
+    """Envía un push a una lista de Expo push tokens vía la HTTP API de Expo.
+    Reutilizable: la Fase 3 (scheduler) la llamará a la hora de la dosis.
+    Devuelve un resumen con los tickets de Expo para diagnóstico y elimina de
+    `devices` los tokens que Expo reporte como DeviceNotRegistered."""
+    valid = [t for t in tokens if isinstance(t, str) and t.startswith("ExponentPushToken")]
+    if not valid:
+        return {"sent": 0, "tickets": [], "removed_tokens": []}
+
+    messages = [
+        {"to": t, "title": title, "body": body, "sound": "default", "data": data or {}}
+        for t in valid
+    ]
+
+    tickets: List[dict] = []
+    async with httpx.AsyncClient(timeout=15) as http_client:
+        # Expo recomienda lotes de hasta 100 mensajes por request.
+        for i in range(0, len(messages), 100):
+            chunk = messages[i:i + 100]
+            try:
+                resp = await http_client.post(
+                    EXPO_PUSH_URL,
+                    json=chunk,
+                    headers={"Content-Type": "application/json", "Accept": "application/json"},
+                )
+            except httpx.HTTPError as e:
+                logging.error(f"[push] Error de red al enviar a Expo: {e}")
+                for msg in chunk:
+                    tickets.append({"token": msg["to"], "status": "error", "details": {"error": "NetworkError"}})
+                continue
+
+            if resp.status_code != 200:
+                logging.error(f"[push] Expo respondió {resp.status_code}: {resp.text[:500]}")
+                for msg in chunk:
+                    tickets.append({"token": msg["to"], "status": "error", "http_status": resp.status_code})
+                continue
+
+            data_items = resp.json().get("data", [])
+            # Expo devuelve los tickets en el mismo orden que los mensajes.
+            for msg, ticket in zip(chunk, data_items if isinstance(data_items, list) else []):
+                tickets.append({"token": msg["to"], **ticket})
+
+    # Limpieza básica de tokens muertos: DeviceNotRegistered -> borrar de devices.
+    removed: List[str] = []
+    for tk in tickets:
+        if tk.get("status") == "error" and (tk.get("details") or {}).get("error") == "DeviceNotRegistered":
+            await db.devices.delete_one({"token": tk["token"]})
+            removed.append(tk["token"])
+
+    logging.info(f"[push] enviados={len(valid)} tickets={len(tickets)} muertos_eliminados={len(removed)}")
+    return {"sent": len(valid), "tickets": tickets, "removed_tokens": removed}
+
+@api_router.post("/devices/test-push")
+async def test_push(user_id: str = Depends(get_current_user)):
+    """FASE 2 (prueba de plomería): envía un push fijo a TODOS los dispositivos
+    del usuario actual y devuelve los tickets de Expo para diagnóstico."""
+    devices = await db.devices.find({"user_id": user_id}, {"token": 1}).to_list(100)
+    tokens = [d["token"] for d in devices]
+    if not tokens:
+        raise HTTPException(status_code=400, detail="No hay dispositivos registrados para este usuario")
+    result = await send_push_to_tokens(
+        tokens,
+        "MedControl",
+        "Notificación de prueba ✅",
+        data={"type": "test"},
+    )
+    return result
 
 # ============= MEDICATION ENDPOINTS =============
 @api_router.get("/medications/patient/{patient_id}")
