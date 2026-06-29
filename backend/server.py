@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
+import asyncio
 import logging
 import re
 from pathlib import Path
@@ -14,6 +15,14 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from contextlib import asynccontextmanager
 
 MISSED_GRACE_MINUTES = 30  # margen antes de marcar una dosis como "perdida"
+
+# Scheduler de push (Fase 3B): cadencia y ventana de gracia.
+SCHEDULER_INTERVAL_SECONDS = 60  # el loop revisa cada minuto
+# Ventana para no perder una dosis si un tick se atrasa o se salta. Debe ser
+# >= intervalo (para no dejar huecos) y < ~2x para no "revivir" dosis viejas
+# tras una caída del servidor. La idempotencia (sent_notifications) garantiza
+# que aunque dos ticks caigan dentro de la ventana, el push salga una sola vez.
+SCHEDULER_GRACE_SECONDS = 90
 
 # Zona horaria del paciente (Fase 3A). Se guarda como nombre IANA (ej.
 # "America/Bogota") para que la Fase 3B calcule el instante UTC de cada dosis
@@ -34,6 +43,7 @@ def validate_timezone(tz: str) -> str:
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 from bson import ObjectId
+from pymongo.errors import DuplicateKeyError
 import time
 from collections import defaultdict
 import sendgrid
@@ -159,6 +169,12 @@ async def lifespan(app: FastAPI):
         # usuario para resolver rápido todos los tokens de un cuidador.
         await db.devices.create_index("token", unique=True)
         await db.devices.create_index("user_id")
+        # Idempotencia del scheduler (Fase 3B): una dosis se notifica una sola vez.
+        await db.sent_notifications.create_index(
+            [("medication_id", 1), ("scheduled_datetime", 1)],
+            unique=True,
+            name="sent_notifications_unique_dose"
+        )
         logging.info("MongoDB indexes created successfully")
     except Exception as e:
         logging.warning(f"Index creation warning: {e}")
@@ -177,8 +193,28 @@ async def lifespan(app: FastAPI):
             )
     except Exception as e:
         logging.warning(f"Patient timezone migration warning: {e}")
+
+    # Scheduler de push (Fase 3B): proceso interno cada minuto.
+    # GUARD MULTI-WORKER: si algún día Render levanta varios workers
+    # (WEB_CONCURRENCY>1), el scheduler debe correr en UNO SOLO para no duplicar
+    # push. Hoy WEB_CONCURRENCY=1, así que corre por defecto. Para deshabilitarlo
+    # en réplicas extra, poner RUN_SCHEDULER=0 en esas instancias. (La
+    # idempotencia por índice único es la red de seguridad si aun así coincidieran.)
+    scheduler_task = None
+    if os.getenv("RUN_SCHEDULER", "1").strip().lower() not in ("0", "false", "no"):
+        scheduler_task = asyncio.create_task(scheduler_loop())
+    else:
+        logging.info("[scheduler] deshabilitado por RUN_SCHEDULER")
+
     yield
+
     # Shutdown
+    if scheduler_task is not None:
+        scheduler_task.cancel()
+        try:
+            await scheduler_task
+        except asyncio.CancelledError:
+            pass
     client.close()
 
 # Create the main app
@@ -1105,6 +1141,182 @@ async def send_push_to_tokens(
 
     logging.info(f"[push] enviados={len(valid)} tickets={len(tickets)} muertos_eliminados={len(removed)}")
     return {"sent": len(valid), "tickets": tickets, "removed_tokens": removed}
+
+# ============= SCHEDULER DE PUSH (FASE 3B) =============
+# Proceso interno (asyncio task lanzada en el lifespan) que cada minuto revisa
+# qué dosis vencen AHORA en la hora local de cada paciente y manda UN push a
+# todos sus cuidadores. Resuelve el bug central: hoy solo le suena a quien tiene
+# la app abierta; con esto le llega a todos aunque la app esté cerrada.
+#
+# Idempotencia: colección `sent_notifications` con índice único
+# (medication_id + scheduled_datetime). Cada dosis se "reclama" insertando antes
+# de enviar; si ya existe, no se reenvía. Así, aunque el tick caiga varias veces
+# dentro de la ventana de gracia, el push sale exactamente una vez.
+
+def _normalize_hhmm(time_str: str) -> str:
+    """Normaliza 'H:M' -> 'HH:MM' (defensivo; lo guardado ya viene normalizado)."""
+    try:
+        parts = time_str.split(":")
+        if len(parts) == 2:
+            return f"{parts[0].zfill(2)}:{parts[1].zfill(2)}"
+    except Exception:
+        pass
+    return time_str
+
+
+async def _notify_dose(med: dict, patient: dict, scheduled_datetime: str, now_utc: datetime) -> None:
+    """Envía el push de UNA dosis a los cuidadores del paciente, una sola vez.
+    No hace nada si la dosis ya fue marcada (alguien actuó) o ya fue notificada."""
+    med_id = str(med["_id"])
+    patient_id = str(patient["_id"])
+
+    # 1) Si la dosis ya tiene log (tomada/omitida/perdida por cualquier cuidador),
+    #    ya se actuó: no tiene sentido recordar algo hecho.
+    already_logged = await db.medication_logs.find_one(
+        {"medication_id": med_id, "scheduled_datetime": scheduled_datetime}, {"_id": 1}
+    )
+    if already_logged:
+        return
+
+    # 2) Tokens de los cuidadores. Si no hay, no reclamamos la dosis: si más tarde
+    #    (dentro de la ventana) aparece un token, podrá enviarse.
+    tokens = await get_patient_caregiver_tokens(patient_id)
+    if not tokens:
+        return
+
+    # 3) Reclamar la dosis ANTES de enviar (índice único = idempotencia real,
+    #    incluso si dos ejecuciones coincidieran). Si ya estaba reclamada, salir.
+    try:
+        await db.sent_notifications.insert_one({
+            "medication_id": med_id,
+            "scheduled_datetime": scheduled_datetime,
+            "patient_id": patient_id,
+            "sent_at": now_utc,
+        })
+    except DuplicateKeyError:
+        return
+
+    # 4) Enviar. Contenido en español (i18n de push: v2). El `data` lleva lo
+    #    necesario para que al tocar la notificación la app navegue a la dosis.
+    patient_name = patient.get("name", "")
+    await send_push_to_tokens(
+        tokens,
+        "MedControl",
+        f"Es hora de {med.get('name', 'tu medicamento')} — Paciente: {patient_name}",
+        data={
+            "type": "dose",
+            "patient_id": patient_id,
+            "medication_id": med_id,
+            "scheduled_datetime": scheduled_datetime,
+        },
+    )
+
+
+async def run_scheduler_tick() -> None:
+    """Una pasada del scheduler: detecta y notifica las dosis que vencen ahora."""
+    now_utc = datetime.now(timezone.utc)
+
+    patients = await db.patients.find(
+        {}, {"name": 1, "timezone": 1}
+    ).to_list(None)
+    if not patients:
+        return
+    patient_ids = [str(p["_id"]) for p in patients]
+
+    # Medicamentos activos y con notificaciones habilitadas de todos los pacientes.
+    medications = await db.medications.find({
+        "patient_id": {"$in": patient_ids},
+        "active": True,
+        "notifications_enabled": {"$ne": False},
+    }).to_list(None)
+    if not medications:
+        return
+
+    meds_by_patient = defaultdict(list)
+    for m in medications:
+        meds_by_patient[m["patient_id"]].append(m)
+
+    for patient in patients:
+        pid = str(patient["_id"])
+        pmeds = meds_by_patient.get(pid)
+        if not pmeds:
+            continue
+
+        # Hora local del PACIENTE ahora (DST correcto vía zoneinfo).
+        tz_name = patient.get("timezone") or DEFAULT_TIMEZONE
+        try:
+            tz = ZoneInfo(tz_name)
+        except Exception:
+            logging.warning(f"[scheduler] zona inválida '{tz_name}' en paciente {pid}; uso {DEFAULT_TIMEZONE}")
+            tz = ZoneInfo(DEFAULT_TIMEZONE)
+        now_local = now_utc.astimezone(tz).replace(tzinfo=None)
+        today_str = now_local.date().isoformat()
+        weekday = now_local.weekday()
+
+        for med in pmeds:
+            # Rango de vigencia del medicamento (mismas reglas que el dashboard).
+            if med.get("start_date") and med["start_date"] > today_str:
+                continue
+            if med.get("end_date") and med["end_date"] < today_str:
+                continue
+            if not should_show_today(med, weekday):
+                continue
+
+            # Baseline: no notificar dosis anteriores a la creación/edición del
+            # medicamento (convertido a hora local del paciente).
+            base = med.get("updated_at") or med.get("created_at")
+            base_local = None
+            if base:
+                base_local = (
+                    ensure_naive(base)
+                    .replace(tzinfo=timezone.utc)
+                    .astimezone(tz)
+                    .replace(tzinfo=None)
+                )
+
+            for time_str in med.get("schedule_times", []):
+                normalized = _normalize_hhmm(time_str)
+                try:
+                    scheduled_local = datetime.fromisoformat(f"{today_str}T{normalized}:00")
+                except (ValueError, TypeError):
+                    continue
+
+                # Vence ahora si ya pasó la hora pero dentro de la ventana de
+                # gracia. Match por instante (no por string) para no perder una
+                # dosis si el tick se atrasa y cruza el minuto.
+                delta = (now_local - scheduled_local).total_seconds()
+                if not (0 <= delta < SCHEDULER_GRACE_SECONDS):
+                    continue
+                if base_local is not None and scheduled_local < base_local:
+                    continue
+
+                scheduled_datetime = f"{today_str}T{normalized}:00"
+                try:
+                    await _notify_dose(med, patient, scheduled_datetime, now_utc)
+                except Exception as e:
+                    logging.error(
+                        f"[scheduler] error notificando dosis med={str(med['_id'])} "
+                        f"@{scheduled_datetime}: {e}",
+                        exc_info=True,
+                    )
+
+
+async def scheduler_loop() -> None:
+    """Loop interno cada SCHEDULER_INTERVAL_SECONDS. No bloquea el event loop:
+    todo es async y los envíos a Expo van por httpx async."""
+    logging.info(f"[scheduler] iniciado (cada {SCHEDULER_INTERVAL_SECONDS}s)")
+    # Pequeña espera para no chocar con la creación de índices del arranque.
+    await asyncio.sleep(5)
+    while True:
+        start = time.monotonic()
+        try:
+            await run_scheduler_tick()
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logging.error(f"[scheduler] error en tick: {e}", exc_info=True)
+        elapsed = time.monotonic() - start
+        await asyncio.sleep(max(1.0, SCHEDULER_INTERVAL_SECONDS - elapsed))
 
 @api_router.post("/devices/test-push")
 async def test_push(user_id: str = Depends(get_current_user)):
