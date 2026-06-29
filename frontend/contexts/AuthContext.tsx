@@ -3,7 +3,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import Constants from 'expo-constants';
 import { setUnauthorizedHandler } from '../utils/api';
-import { cancelAllScheduledNotifications } from '../utils/notifications';
+import {
+  cancelAllScheduledNotifications,
+  registerPushToken,
+  unregisterPushToken,
+  clearLocalPushToken,
+} from '../utils/notifications';
 
 const API_URL = Constants.expoConfig?.extra?.EXPO_PUBLIC_BACKEND_URL || process.env.EXPO_PUBLIC_BACKEND_URL;
 
@@ -53,6 +58,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.warn('No se pudieron cancelar las notificaciones al expirar la sesión:', e),
       );
       AsyncStorage.removeItem('lastReconcile').catch(() => {});
+      // Sesión inválida: no podemos llamar al backend, pero olvidamos el token
+      // local para que el próximo login lo re-registre con la cuenta correcta.
+      clearLocalPushToken().catch(() => {});
       setToken(null);
       setUser(null);
     });
@@ -71,6 +79,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           });
           setToken(storedToken);
           setUser(JSON.parse(storedUser));
+          // Sesión válida al arrancar: registrar/actualizar el push token.
+          registerPushToken().catch(() => {});
         } catch (err: any) {
           const status = err?.response?.status;
           if (status === 401 || status === 403) {
@@ -100,6 +110,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await AsyncStorage.setItem('user', JSON.stringify(newUser));
       setToken(newToken);
       setUser(newUser);
+      // Registrar el push token de este dispositivo para la cuenta que entró.
+      registerPushToken().catch(() => {});
     } catch (error: any) {
       throw new Error(error.response?.data?.detail || 'Error al iniciar sesión');
     }
@@ -127,6 +139,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await AsyncStorage.setItem('user', JSON.stringify(newUser));
       setToken(newToken);
       setUser(newUser);
+      // Auto-login sin verificación (si el backend lo permitiera): registrar token.
+      registerPushToken().catch(() => {});
       return { requiresVerification: false };
     } catch (error: any) {
       throw new Error(error.response?.data?.detail || 'Error al registrarse');
@@ -144,6 +158,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await AsyncStorage.setItem('user', JSON.stringify(newUser));
       setToken(newToken);
       setUser(newUser);
+      // Verificación exitosa = sesión nueva: registrar el push token.
+      registerPushToken().catch(() => {});
     } catch (error: any) {
       throw new Error(error.response?.data?.detail || 'Código inválido');
     }
@@ -168,6 +184,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (e) {
       console.warn('No se pudieron cancelar las notificaciones al cerrar sesión:', e);
     }
+    // Dar de baja el push token (la sesión aún es válida) para no recibir push
+    // de esta cuenta en este dispositivo tras salir.
+    await unregisterPushToken();
     if (user?.id) {
       await AsyncStorage.removeItem(`dashboard:${user.id}`);
     }
@@ -191,6 +210,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } catch (e) {
         console.warn('No se pudieron cancelar las notificaciones al eliminar la cuenta:', e);
       }
+      // El JWT sigue siendo válido un momento: dar de baja el token del backend.
+      await unregisterPushToken();
       await AsyncStorage.removeItem('lastReconcile');
       await AsyncStorage.removeItem('token');
       await AsyncStorage.removeItem('user');
