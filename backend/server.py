@@ -136,6 +136,10 @@ async def lifespan(app: FastAPI):
         await db.email_verifications.create_index("expires_at", expireAfterSeconds=0)
         # TTL para invitaciones (48 horas)
         await db.invitations.create_index("expires_at", expireAfterSeconds=0)
+        # Dispositivos para push: un token es único (un dispositivo); índice por
+        # usuario para resolver rápido todos los tokens de un cuidador.
+        await db.devices.create_index("token", unique=True)
+        await db.devices.create_index("user_id")
         logging.info("MongoDB indexes created successfully")
     except Exception as e:
         logging.warning(f"Index creation warning: {e}")
@@ -335,6 +339,14 @@ class VerifyEmailRequest(BaseModel):
 
 class ResendVerificationRequest(BaseModel):
     email: EmailStr
+
+# Modelos para registro de dispositivos (push notifications)
+class DeviceRegister(BaseModel):
+    token: str = Field(..., max_length=512)
+    platform: Optional[str] = Field(None, max_length=20)
+
+class DeviceUnregister(BaseModel):
+    token: str = Field(..., max_length=512)
 
 # ============= HELPERS =============
 def utc_now_naive() -> datetime:
@@ -933,6 +945,59 @@ async def leave_patient(patient_id: str, user_id: str = Depends(get_current_user
     )
     
     return {"message": "Has dejado de cuidar a este paciente"}
+
+# ============= DEVICE / PUSH TOKEN ENDPOINTS =============
+@api_router.post("/devices")
+async def register_device(data: DeviceRegister, user_id: str = Depends(get_current_user)):
+    """Registrar el Expo push token del dispositivo actual para este usuario.
+    Upsert por token: un mismo token no se duplica y se re-asocia al usuario que
+    lo registra (útil al cambiar de cuenta en el mismo dispositivo). Un usuario
+    puede tener varios tokens (varios dispositivos). FASE 1: solo se guarda, no
+    se envía push todavía."""
+    token = data.token.strip()
+    if not token:
+        raise HTTPException(status_code=400, detail="Token requerido")
+    now = datetime.now(timezone.utc)
+    await db.devices.update_one(
+        {"token": token},
+        {
+            "$set": {
+                "user_id": user_id,
+                "token": token,
+                "platform": data.platform,
+                "updated_at": now,
+            },
+            "$setOnInsert": {"created_at": now},
+        },
+        upsert=True,
+    )
+    return {"message": "Dispositivo registrado"}
+
+@api_router.delete("/devices")
+async def unregister_device(data: DeviceUnregister, user_id: str = Depends(get_current_user)):
+    """Eliminar un token del usuario actual (p. ej. al cerrar sesión) para no
+    seguir recibiendo push de esta cuenta en este dispositivo."""
+    token = data.token.strip()
+    await db.devices.delete_one({"token": token, "user_id": user_id})
+    return {"message": "Dispositivo eliminado"}
+
+async def get_patient_caregiver_tokens(patient_id: str) -> List[str]:
+    """Todos los Expo push tokens de los cuidadores (dueño + aceptados) de un
+    paciente. Aún NO se usa (FASE 1 es solo registro); definido aquí para que la
+    fase de envío tenga claro el modelo de datos."""
+    patient = await db.patients.find_one(
+        {"_id": ObjectId(patient_id)}, {"caregiver_ids": 1}
+    )
+    if not patient:
+        return []
+    user_ids = patient.get("caregiver_ids", [])
+    if not user_ids:
+        return []
+    devices = await db.devices.find(
+        {"user_id": {"$in": user_ids}}, {"token": 1}
+    ).to_list(1000)
+    # Set para deduplicar por si dos cuidadores comparten un token improbable.
+    return list({d["token"] for d in devices})
 
 # ============= MEDICATION ENDPOINTS =============
 @api_router.get("/medications/patient/{patient_id}")
