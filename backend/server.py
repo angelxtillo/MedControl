@@ -10,9 +10,27 @@ from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr, field_validator
 from typing import List, Optional
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from contextlib import asynccontextmanager
 
 MISSED_GRACE_MINUTES = 30  # margen antes de marcar una dosis como "perdida"
+
+# Zona horaria del paciente (Fase 3A). Se guarda como nombre IANA (ej.
+# "America/Bogota") para que la Fase 3B calcule el instante UTC de cada dosis
+# manejando bien el horario de verano (DST) en cualquier país.
+DEFAULT_TIMEZONE = "America/Bogota"
+
+def validate_timezone(tz: str) -> str:
+    """Valida que el string sea una zona IANA real (zoneinfo). Rechaza con 400
+    para no guardar basura que rompa el scheduler de la Fase 3B."""
+    if not isinstance(tz, str) or not tz.strip():
+        raise HTTPException(status_code=400, detail="Zona horaria inválida")
+    tz = tz.strip()
+    try:
+        ZoneInfo(tz)
+    except (ZoneInfoNotFoundError, ValueError):
+        raise HTTPException(status_code=400, detail=f"Zona horaria inválida: {tz}")
+    return tz
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 from bson import ObjectId
@@ -144,6 +162,21 @@ async def lifespan(app: FastAPI):
         logging.info("MongoDB indexes created successfully")
     except Exception as e:
         logging.warning(f"Index creation warning: {e}")
+
+    # Migración Fase 3A: pacientes sin zona horaria → DEFAULT_TIMEZONE.
+    # Persiste el valor para que el scheduler (3B) siempre tenga una zona IANA.
+    try:
+        migrated = await db.patients.update_many(
+            {"timezone": {"$exists": False}},
+            {"$set": {"timezone": DEFAULT_TIMEZONE}}
+        )
+        if migrated.modified_count:
+            logging.info(
+                f"Migración timezone: {migrated.modified_count} pacientes "
+                f"actualizados a {DEFAULT_TIMEZONE}"
+            )
+    except Exception as e:
+        logging.warning(f"Patient timezone migration warning: {e}")
     yield
     # Shutdown
     client.close()
@@ -199,12 +232,15 @@ class PatientCreate(BaseModel):
     age: Optional[int] = Field(None, ge=0, le=150)
     photo: Optional[str] = Field(None, max_length=2_800_000)  # ~2 MB base64
     notes: Optional[str] = Field(None, max_length=1000)
+    # Zona IANA del paciente (Fase 3A). Si no llega, el endpoint aplica DEFAULT_TIMEZONE.
+    timezone: Optional[str] = Field(None, max_length=64)
 
 class PatientUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=100)
     age: Optional[int] = Field(None, ge=0, le=150)
     photo: Optional[str] = Field(None, max_length=2_800_000)
     notes: Optional[str] = Field(None, max_length=1000)
+    timezone: Optional[str] = Field(None, max_length=64)
 
 class Patient(BaseModel):
     id: str
@@ -212,6 +248,7 @@ class Patient(BaseModel):
     age: Optional[int] = None
     photo: Optional[str] = None
     notes: Optional[str] = None
+    timezone: str = DEFAULT_TIMEZONE
     caregiver_ids: List[str] = []
     created_by: Optional[str] = None
     created_at: Optional[datetime] = None
@@ -770,6 +807,7 @@ async def get_patients(user_id: str = Depends(get_current_user)):
             "age": p.get("age"),
             "photo": p.get("photo"),
             "notes": p.get("notes"),
+            "timezone": p.get("timezone", DEFAULT_TIMEZONE),
             "caregiver_ids": p.get("caregiver_ids", []),
             "created_by": created_by,
             "is_owner": user_id == created_by,
@@ -779,11 +817,15 @@ async def get_patients(user_id: str = Depends(get_current_user)):
 
 @api_router.post("/patients")
 async def create_patient(patient: PatientCreate, user_id: str = Depends(get_current_user)):
+    # Zona del paciente: la que envía el dispositivo, o el default si no llega.
+    # Se valida como zona IANA real (400 si es inválida).
+    tz = validate_timezone(patient.timezone) if patient.timezone else DEFAULT_TIMEZONE
     patient_dict = {
         "name": patient.name,
         "age": patient.age,
         "photo": patient.photo,
         "notes": patient.notes,
+        "timezone": tz,
         "caregiver_ids": [user_id],
         "created_by": user_id,  # Track who created the patient
         "created_at": datetime.now(timezone.utc)
@@ -795,6 +837,7 @@ async def create_patient(patient: PatientCreate, user_id: str = Depends(get_curr
         "age": patient.age,
         "photo": patient.photo,
         "notes": patient.notes,
+        "timezone": tz,
         "caregiver_ids": [user_id],
         "created_at": patient_dict["created_at"].isoformat()
     }
@@ -812,14 +855,17 @@ async def update_patient(
     })
     if not existing:
         raise HTTPException(status_code=404, detail="Patient not found")
-    
+
     update_data = {k: v for k, v in patient.dict().items() if v is not None}
+    # Si se actualiza la zona, validarla como IANA real (400 si es basura).
+    if "timezone" in update_data:
+        update_data["timezone"] = validate_timezone(update_data["timezone"])
     if update_data:
         await db.patients.update_one(
             {"_id": ObjectId(patient_id)},
             {"$set": update_data}
         )
-    
+
     updated = await db.patients.find_one({"_id": ObjectId(patient_id)})
     return {
         "id": str(updated["_id"]),
@@ -827,6 +873,7 @@ async def update_patient(
         "age": updated.get("age"),
         "photo": updated.get("photo"),
         "notes": updated.get("notes"),
+        "timezone": updated.get("timezone", DEFAULT_TIMEZONE),
         "caregiver_ids": updated.get("caregiver_ids", []),
         "created_at": updated["created_at"].isoformat()
     }
