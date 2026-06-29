@@ -125,6 +125,8 @@
     "age": "Edad",
     "notes": "Notas",
     "photo": "Foto",
+    "timezone": "Zona horaria",
+    "timezoneHint": "Las dosis se calculan en la zona horaria del paciente.",
     "years": "años",
     "noPatients": "No hay pacientes",
     "addFirstPatient": "Agrega tu primer paciente",

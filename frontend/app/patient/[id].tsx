@@ -21,6 +21,11 @@ import api from '../../utils/api';
 import { cancelMedicationNotifications } from '../../utils/notifications';
 import CaregiversManager from '../../components/CaregiversManager';
 import { useTranslation } from 'react-i18next';
+import {
+  DEFAULT_TIMEZONE,
+  timezoneCity,
+  timezoneOptionsIncluding,
+} from '../../utils/timezones';
 
 interface Patient {
   id: string;
@@ -28,6 +33,7 @@ interface Patient {
   age?: number;
   photo?: string;
   notes?: string;
+  timezone?: string;
   is_owner?: boolean;
 }
 
@@ -54,6 +60,8 @@ export default function PatientDetail() {
   const [editName, setEditName] = useState('');
   const [editAge, setEditAge] = useState('');
   const [editNotes, setEditNotes] = useState('');
+  const [editTimezone, setEditTimezone] = useState(DEFAULT_TIMEZONE);
+  const [tzPickerVisible, setTzPickerVisible] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -66,6 +74,7 @@ export default function PatientDetail() {
       setEditName(patient.name);
       setEditAge(patient.age ? patient.age.toString() : '');
       setEditNotes(patient.notes || '');
+      setEditTimezone(patient.timezone || DEFAULT_TIMEZONE);
     }
   }, [patient]);
 
@@ -226,6 +235,8 @@ export default function PatientDetail() {
         updateData.notes = null;
       }
 
+      updateData.timezone = editTimezone;
+
       await api.put(`/patients/${id}`, updateData);
       
       Alert.alert(t('common.success'), t('patients.patientUpdated'));
@@ -266,7 +277,14 @@ export default function PatientDetail() {
           <Text style={styles.patientName}>{patient.name}</Text>
           {patient.age && <Text style={styles.patientAge}>{patient.age} {t('patients.years')}</Text>}
           {patient.notes && <Text style={styles.patientNotes}>{patient.notes}</Text>}
-          
+
+          <View style={styles.timezoneBadge}>
+            <Ionicons name="globe-outline" size={16} color="#2196F3" />
+            <Text style={styles.timezoneBadgeText}>
+              {t('patients.timezone')}: {timezoneCity(patient.timezone)} ({patient.timezone || DEFAULT_TIMEZONE})
+            </Text>
+          </View>
+
           <View style={styles.patientActions}>
             <TouchableOpacity style={styles.editPatientButton} onPress={openEditModal}>
               <Ionicons name="pencil-outline" size={20} color="#2196F3" />
@@ -456,6 +474,21 @@ export default function PatientDetail() {
                   numberOfLines={3}
                 />
               </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>{t('patients.timezone')}</Text>
+                <TouchableOpacity
+                  style={styles.tzSelect}
+                  onPress={() => setTzPickerVisible(true)}
+                >
+                  <Ionicons name="globe-outline" size={18} color="#2196F3" />
+                  <Text style={styles.tzSelectText}>
+                    {timezoneCity(editTimezone)} ({editTimezone})
+                  </Text>
+                  <Ionicons name="chevron-down" size={18} color="#999" />
+                </TouchableOpacity>
+                <Text style={styles.tzHint}>{t('patients.timezoneHint')}</Text>
+              </View>
             </ScrollView>
 
             <View style={styles.modalFooter}>
@@ -479,6 +512,51 @@ export default function PatientDetail() {
             </View>
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Selector de zona horaria del paciente */}
+      <Modal
+        visible={tzPickerVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setTzPickerVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{t('patients.timezone')}</Text>
+              <TouchableOpacity
+                onPress={() => setTzPickerVisible(false)}
+                style={styles.closeButton}
+              >
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalForm}>
+              {timezoneOptionsIncluding(editTimezone).map((opt) => {
+                const selected = opt.value === editTimezone;
+                return (
+                  <TouchableOpacity
+                    key={opt.value}
+                    style={[styles.tzOption, selected && styles.tzOptionSelected]}
+                    onPress={() => {
+                      setEditTimezone(opt.value);
+                      setTzPickerVisible(false);
+                    }}
+                  >
+                    <View style={styles.tzOptionInfo}>
+                      <Text style={styles.tzOptionCity}>{opt.city}</Text>
+                      <Text style={styles.tzOptionIana}>{opt.value}</Text>
+                    </View>
+                    {selected && (
+                      <Ionicons name="checkmark-circle" size={22} color="#4CAF50" />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
       </Modal>
     </SafeAreaView>
   );
@@ -544,6 +622,67 @@ const styles = StyleSheet.create({
     color: '#999',
     textAlign: 'center',
     marginTop: 8,
+  },
+  timezoneBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 12,
+    backgroundColor: '#E3F2FD',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  timezoneBadgeText: {
+    fontSize: 12,
+    color: '#1565C0',
+    fontWeight: '500',
+  },
+  tzSelect: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  tzSelectText: {
+    flex: 1,
+    fontSize: 16,
+    color: '#212121',
+  },
+  tzHint: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 6,
+  },
+  tzOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  tzOptionSelected: {
+    backgroundColor: '#F1F8E9',
+  },
+  tzOptionInfo: {
+    flex: 1,
+  },
+  tzOptionCity: {
+    fontSize: 16,
+    color: '#212121',
+    fontWeight: '500',
+  },
+  tzOptionIana: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 2,
   },
   deletePatientButton: {
     flexDirection: 'row',

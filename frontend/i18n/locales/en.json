@@ -125,6 +125,8 @@
     "age": "Age",
     "notes": "Notes",
     "photo": "Photo",
+    "timezone": "Time zone",
+    "timezoneHint": "Doses are calculated in the patient's time zone.",
     "years": "years old",
     "noPatients": "No patients",
     "addFirstPatient": "Add your first patient",

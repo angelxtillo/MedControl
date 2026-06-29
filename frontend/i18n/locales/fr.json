@@ -125,6 +125,8 @@
     "age": "Âge",
     "notes": "Notes",
     "photo": "Photo",
+    "timezone": "Fuseau horaire",
+    "timezoneHint": "Les doses sont calculées dans le fuseau horaire du patient.",
     "years": "ans",
     "noPatients": "Aucun patient",
     "addFirstPatient": "Ajoutez votre premier patient",

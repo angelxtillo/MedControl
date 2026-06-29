@@ -20,6 +20,7 @@ import { router, useFocusEffect } from 'expo-router';
 import api from '../../utils/api';
 import * as ImagePicker from 'expo-image-picker';
 import { useTranslation } from 'react-i18next';
+import { getDeviceTimezone } from '../../utils/timezones';
 
 interface Patient {
   id: string;
@@ -102,11 +103,14 @@ export default function Patients() {
         });
         Alert.alert(t('common.success'), t('patients.patientUpdated'));
       } else {
+        // Autodetecta la zona del dispositivo (ej. "America/Bogota"); el
+        // cuidador no hace nada en el caso normal y puede cambiarla luego en la ficha.
         await api.post('/patients', {
           name,
           age: age ? parseInt(age, 10) : null,
           notes,
           photo,
+          timezone: getDeviceTimezone(),
         });
         Alert.alert(t('common.success'), t('patients.patientAdded'));
       }
