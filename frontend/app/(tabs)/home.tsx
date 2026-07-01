@@ -15,7 +15,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { MedicationCard } from '../../components/MedicationCard';
 import api from '../../utils/api';
 import { useFocusEffect } from '@react-navigation/native';
-import { requestNotificationPermissions, syncAllMedicationNotifications, MedicationForSchedule } from '../../utils/notifications';
+import { requestNotificationPermissions, registerPushToken, syncAllMedicationNotifications, MedicationForSchedule } from '../../utils/notifications';
 import { useTranslation } from 'react-i18next';
 import Animated, { FadeInDown, FadeIn, ZoomIn } from 'react-native-reanimated';
 
@@ -59,7 +59,13 @@ export default function Home() {
   const [processingKeys, setProcessingKeys] = useState<Set<string>>(new Set());
   const lastLoad = useRef(0);
   useEffect(() => {
-    requestNotificationPermissions();
+    // Pedir el permiso y, si se concede, re-disparar el registro del push token.
+    // En el primer login registerPushToken() (en AuthContext) corre antes de que
+    // exista el permiso y sale sin registrar; aquí lo reintentamos justo tras el
+    // grant para que el token quede registrado sin tener que reabrir la app.
+    requestNotificationPermissions().then((granted) => {
+      if (granted) registerPushToken().catch(() => {});
+    });
     cleanOldDoseLogKeys();
   }, []);
 
