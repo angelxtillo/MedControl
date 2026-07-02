@@ -9,3 +9,9 @@ node_modules/**/*
 *~
 .vscode/**/*
 .idea/**/*
+
+# CNG / Prebuild: EAS regenera las carpetas nativas con `expo prebuild`.
+# No subir android/ ni ios/ para evitar arrastrar estado nativo desincronizado
+# (autolinking stale -> "No variants exist"). La firma la gestiona EAS remoto.
+/android
+/ios
