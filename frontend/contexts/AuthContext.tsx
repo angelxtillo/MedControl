@@ -44,6 +44,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Migración a push server-side: versiones anteriores programaban
+    // notificaciones LOCALES de dosis (y re-avisos +10/+20). Al arrancar se
+    // cancelan todas para que no queden zombis sonando junto al push del
+    // servidor. Idempotente: en builds nuevos no hay nada programado.
+    cancelAllScheduledNotifications().catch(() => {});
     loadStoredAuth();
   }, []);
 
@@ -57,7 +62,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       cancelAllScheduledNotifications().catch((e) =>
         console.warn('No se pudieron cancelar las notificaciones al expirar la sesión:', e),
       );
-      AsyncStorage.removeItem('lastReconcile').catch(() => {});
       // Sesión inválida: no podemos llamar al backend, pero olvidamos el token
       // local para que el próximo login lo re-registre con la cuenta correcta.
       clearLocalPushToken().catch(() => {});
@@ -190,7 +194,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (user?.id) {
       await AsyncStorage.removeItem(`dashboard:${user.id}`);
     }
-    await AsyncStorage.removeItem('lastReconcile');
     await AsyncStorage.removeItem('token');
     await AsyncStorage.removeItem('user');
     setToken(null);
@@ -212,7 +215,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       // El JWT sigue siendo válido un momento: dar de baja el token del backend.
       await unregisterPushToken();
-      await AsyncStorage.removeItem('lastReconcile');
       await AsyncStorage.removeItem('token');
       await AsyncStorage.removeItem('user');
       setToken(null);

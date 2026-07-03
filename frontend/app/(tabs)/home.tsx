@@ -15,7 +15,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { MedicationCard } from '../../components/MedicationCard';
 import api from '../../utils/api';
 import { useFocusEffect } from '@react-navigation/native';
-import { requestNotificationPermissions, registerPushToken, syncAllMedicationNotifications, MedicationForSchedule, LAST_RECONCILE_KEY } from '../../utils/notifications';
+import { requestNotificationPermissions, registerPushToken } from '../../utils/notifications';
 import { useTranslation } from 'react-i18next';
 import Animated, { FadeInDown, FadeIn, ZoomIn } from 'react-native-reanimated';
 
@@ -66,7 +66,6 @@ export default function Home() {
     requestNotificationPermissions().then((granted) => {
       if (granted) registerPushToken().catch(() => {});
     });
-    cleanOldDoseLogKeys();
   }, []);
 
   useFocusEffect(
@@ -74,73 +73,6 @@ export default function Home() {
       loadDashboard();
     }, [])
   );
-
-  const cleanOldDoseLogKeys = async () => {
-    try {
-      const keys = await AsyncStorage.getAllKeys();
-      const today = new Date().toISOString().slice(0, 10);
-      const doseKeys = keys.filter(k => k.startsWith('doseLogged:'));
-      for (const key of doseKeys) {
-        const parts = key.split(':');
-        if (parts.length >= 3 && parts[2] < today) {
-          await AsyncStorage.removeItem(key);
-        }
-      }
-    } catch (_) {}
-  };
-
-  const markDoseLogged = async (medicationId: string, scheduledTime: string) => {
-    const today = new Date().toISOString().slice(0, 10);
-    const timeOnly = scheduledTime.includes('T')
-      ? scheduledTime.split('T')[1].slice(0, 5)
-      : scheduledTime.slice(0, 5);
-    const key = `doseLogged:${medicationId}:${today}:${timeOnly}`;
-    try {
-      await AsyncStorage.setItem(key, '1');
-    } catch (_) {}
-  };
-
-  const reconcileNotifications = async () => {
-    // 15 min (antes 6 h): si otro cuidador borra un medicamento/paciente, este
-    // dispositivo solo se entera reconciliando; con 6 h sus recordatorios
-    // locales (incluidos los follow-ups de +10/+20) seguían sonando horas.
-    const RECONCILE_INTERVAL_MS = 15 * 60 * 1000;
-    try {
-      const last = await AsyncStorage.getItem(LAST_RECONCILE_KEY);
-      if (last && Date.now() - Number(last) < RECONCILE_INTERVAL_MS) {
-        return;
-      }
-    } catch (_) {}
-    try {
-      const patientsRes = await api.get('/patients');
-      const patients: { id: string; name: string }[] = patientsRes.data;
-      const medsWithPatient: MedicationForSchedule[] = [];
-      await Promise.all(
-        patients.map(async (p) => {
-          const medsRes = await api.get(`/medications/patient/${p.id}`);
-          const meds: any[] = medsRes.data;
-          for (const med of meds) {
-            if (!med.active) continue;
-            medsWithPatient.push({
-              id: med.id ?? med._id,
-              name: med.name,
-              patient_name: p.name,
-              frequency: med.frequency,
-              schedule_times: med.schedule_times,
-              notifications_enabled: med.notifications_enabled,
-              end_date: med.end_date,
-            });
-          }
-        }),
-      );
-      await syncAllMedicationNotifications(medsWithPatient);
-      try {
-        await AsyncStorage.setItem(LAST_RECONCILE_KEY, String(Date.now()));
-      } catch (_) {}
-    } catch (err) {
-      console.warn('Error reconciliando notificaciones:', err);
-    }
-  };
 
   const loadDashboard = async (force = false) => {
     if (!force && Date.now() - lastLoad.current < 30000) {
@@ -175,7 +107,6 @@ export default function Home() {
         ]);
         setDashboard(todayRes.data);
         setUpcomingDays(upcomingRes.data);
-        reconcileNotifications();
         if (user?.id) {
           try {
             await AsyncStorage.setItem(
@@ -243,7 +174,6 @@ export default function Home() {
           taken_datetime: new Date().toISOString(),
         });
       }
-      await markDoseLogged(medicationId, scheduledDatetime);
       // Refrescar en background saltando debounce
       loadDashboard(true);
     } catch (error) {
@@ -291,7 +221,6 @@ export default function Home() {
           status: 'skipped',
         });
       }
-      await markDoseLogged(medicationId, scheduledDatetime);
       // Refrescar en background saltando debounce
       loadDashboard(true);
     } catch (error) {

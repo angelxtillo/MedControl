@@ -18,7 +18,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, router } from 'expo-router';
 import api from '../../utils/api';
-import { cancelMedicationNotifications, forceNextReconcile } from '../../utils/notifications';
 import CaregiversManager from '../../components/CaregiversManager';
 import { useTranslation } from 'react-i18next';
 import {
@@ -111,15 +110,6 @@ export default function PatientDetail() {
           onPress: async () => {
             try {
               await api.delete(`/patients/${id}`);
-              // Cascada: el backend borró sus medicamentos; limpiar aquí sus
-              // notificaciones locales (principales y follow-ups) para que no
-              // sigan sonando recordatorios de medicamentos que ya no existen.
-              try {
-                for (const med of medications) {
-                  await cancelMedicationNotifications(med.id);
-                }
-                await forceNextReconcile();
-              } catch (_) {}
               Alert.alert(t('common.success'), t('medications.patientDeleted'));
               router.back();
             } catch (error: any) {
@@ -175,11 +165,7 @@ export default function PatientDetail() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await cancelMedicationNotifications(medicationId);
               await api.delete(`/medications/${medicationId}`);
-              // La próxima visita al home reconcilia contra el backend (red de
-              // seguridad por si quedó algo programado con otro identificador).
-              await forceNextReconcile();
               Alert.alert(t('common.success'), t('medications.deleted'));
               loadPatientData();
             } catch (error) {

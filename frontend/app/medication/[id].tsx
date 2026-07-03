@@ -17,7 +17,6 @@ import { useLocalSearchParams, router } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import api from '../../utils/api';
 import { useTranslation } from 'react-i18next';
-import { scheduleMedicationNotifications } from '../../utils/notifications';
 
 // Day abbreviations by language — only for display; Spanish keys are stored in MongoDB
 const getDayNames = (lang: string): string[] => {
@@ -64,7 +63,6 @@ export default function EditMedication() {
   const [endDate, setEndDate] = useState('');
   const [instructions, setInstructions] = useState('');
   const [active, setActive] = useState(true);
-  const [patientName, setPatientName] = useState('');
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [editingTimeIndex, setEditingTimeIndex] = useState<number | null>(null);
 
@@ -79,7 +77,6 @@ export default function EditMedication() {
         const medsResponse = await api.get(`/medications/patient/${patient.id}`);
         const medication = medsResponse.data.find((m: any) => m.id === id);
         if (medication) {
-          setPatientName(patient.name);
           setName(medication.name);
           setDosage(medication.dosage);
           let isSingleTime = false;
@@ -251,17 +248,8 @@ export default function EditMedication() {
         instructions: instructions || null,
         active,
       });
-
-      await scheduleMedicationNotifications({
-        id: String(id),
-        name,
-        patient_name: patientName,
-        frequency: getFrequencyLabel(),
-        schedule_times: finalTimes,
-        notifications_enabled: true,
-        end_date: endDate || null,
-      });
-
+      // Los recordatorios de dosis los envía el scheduler del backend; no se
+      // programa nada local.
       Alert.alert(t('common.success'), t('medications.medicationUpdated'));
       router.back();
     } catch (error) {

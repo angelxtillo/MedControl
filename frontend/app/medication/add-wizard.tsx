@@ -17,7 +17,6 @@ import { router, useLocalSearchParams } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import api from '../../utils/api';
 import { useTranslation } from 'react-i18next';
-import { scheduleMedicationNotifications } from '../../utils/notifications';
 
 const TOTAL_STEPS = 5;
 
@@ -222,17 +221,9 @@ export default function AddMedicationWizard() {
         active: true,
       };
 
-      const res = await api.post('/medications', medicationData);
-      const created = res.data;
-      await scheduleMedicationNotifications({
-        id: created.id ?? created._id,
-        name: created.name,
-        patient_name: patientName || undefined,
-        frequency: created.frequency,
-        schedule_times: created.schedule_times,
-        notifications_enabled: created.notifications_enabled,
-        end_date: created.end_date,
-      });
+      // Los recordatorios de dosis los envía el scheduler del backend (push a
+      // todos los cuidadores); no se programa nada local.
+      await api.post('/medications', medicationData);
       Alert.alert(t('common.success'), t('medications.successAdded'), [
         { text: 'OK', onPress: () => router.back() }
       ]);
