@@ -44,7 +44,9 @@ interface Medication {
   schedule_times: string[];
   active: boolean;
   instructions?: string;
-  notifications_enabled?: boolean;
+  // Preferencia PERSONAL del usuario actual: silenciar este medicamento solo
+  // afecta a sus propios push; los demás cuidadores siguen recibiendo.
+  reminders_enabled_for_me?: boolean;
 }
 
 export default function PatientDetail() {
@@ -188,10 +190,11 @@ export default function PatientDetail() {
     }
   };
 
-  const toggleNotifications = async (medicationId: string, currentStatus: boolean) => {
+  const toggleReminders = async (medicationId: string, currentStatus: boolean) => {
     try {
-      await api.put(`/medications/${medicationId}`, {
-        notifications_enabled: !currentStatus,
+      // Preferencia personal: solo silencia/reactiva los push de ESTE usuario.
+      await api.put(`/medications/${medicationId}/reminders`, {
+        enabled: !currentStatus,
       });
       loadPatientData();
     } catch (error) {
@@ -362,34 +365,37 @@ export default function PatientDetail() {
                   </View>
                 </View>
                 
-                {/* Toggle de notificaciones */}
+                {/* Toggle de recordatorios: preferencia PERSONAL del cuidador */}
                 <View style={styles.notificationRow}>
                   <View style={styles.notificationRowInfo}>
-                    <Ionicons 
-                      name={med.notifications_enabled !== false ? 'notifications' : 'notifications-off'} 
-                      size={18} 
-                      color={med.notifications_enabled !== false ? '#FF9800' : '#999'} 
+                    <Ionicons
+                      name={med.reminders_enabled_for_me !== false ? 'notifications' : 'notifications-off'}
+                      size={18}
+                      color={med.reminders_enabled_for_me !== false ? '#FF9800' : '#999'}
                     />
                     <Text style={[
                       styles.notificationRowText,
-                      med.notifications_enabled === false && styles.notificationRowTextOff
+                      med.reminders_enabled_for_me === false && styles.notificationRowTextOff
                     ]}>
-                      {med.notifications_enabled !== false ? t('medications.notificationsOn') : t('medications.notificationsOff')}
+                      {med.reminders_enabled_for_me !== false ? t('medications.notificationsOn') : t('medications.notificationsOff')}
                     </Text>
                   </View>
                   <TouchableOpacity
                     style={[
                       styles.notificationToggleBtn,
-                      med.notifications_enabled !== false && styles.notificationToggleBtnOn
+                      med.reminders_enabled_for_me !== false && styles.notificationToggleBtnOn
                     ]}
-                    onPress={() => toggleNotifications(med.id, med.notifications_enabled !== false)}
+                    onPress={() => toggleReminders(med.id, med.reminders_enabled_for_me !== false)}
                   >
                     <View style={[
                       styles.notificationToggleKnob,
-                      med.notifications_enabled !== false && styles.notificationToggleKnobOn
+                      med.reminders_enabled_for_me !== false && styles.notificationToggleKnobOn
                     ]} />
                   </TouchableOpacity>
                 </View>
+                <Text style={styles.notificationHint}>
+                  {t('medications.remindersPersonalHint')}
+                </Text>
                 
                 <View style={styles.medicationFooter}>
                   <TouchableOpacity
@@ -957,6 +963,12 @@ const styles = StyleSheet.create({
   },
   notificationRowTextOff: {
     color: '#999',
+  },
+  notificationHint: {
+    fontSize: 11,
+    color: '#999',
+    paddingHorizontal: 4,
+    paddingBottom: 8,
   },
   notificationToggleBtn: {
     width: 48,
