@@ -24,6 +24,12 @@ SCHEDULER_INTERVAL_SECONDS = 60  # el loop revisa cada minuto
 # que aunque dos ticks caigan dentro de la ventana, el push salga una sola vez.
 SCHEDULER_GRACE_SECONDS = 90
 
+# Re-avisos server-side: si la dosis sigue sin log (ni tomada ni omitida) se
+# reenvía a los +10 y +20 minutos (mismos intervalos que tenían las locales).
+# Tras el de +20 no se insiste más: a los +30 (MISSED_GRACE_MINUTES) la dosis
+# pasa a "perdida" por la lógica existente.
+FOLLOWUP_OFFSETS_MINUTES = (10, 20)
+
 # Zona horaria del paciente (Fase 3A). Se guarda como nombre IANA (ej.
 # "America/Bogota") para que la Fase 3B calcule el instante UTC de cada dosis
 # manejando bien el horario de verano (DST) en cualquier país.
@@ -169,11 +175,21 @@ async def lifespan(app: FastAPI):
         # usuario para resolver rápido todos los tokens de un cuidador.
         await db.devices.create_index("token", unique=True)
         await db.devices.create_index("user_id")
-        # Idempotencia del scheduler (Fase 3B): una dosis se notifica una sola vez.
+        # Idempotencia del scheduler: cada envío (principal o re-aviso) sale una
+        # sola vez. La clave incluye `kind` (main|followup10|followup20).
+        # Migración desde el índice viejo (medication_id + scheduled_datetime):
+        # backfill de kind="main" en docs previos y recreación del índice.
+        await db.sent_notifications.update_many(
+            {"kind": {"$exists": False}}, {"$set": {"kind": "main"}}
+        )
+        try:
+            await db.sent_notifications.drop_index("sent_notifications_unique_dose")
+        except Exception:
+            pass  # ya no existe (migración aplicada en un arranque anterior)
         await db.sent_notifications.create_index(
-            [("medication_id", 1), ("scheduled_datetime", 1)],
+            [("medication_id", 1), ("scheduled_datetime", 1), ("kind", 1)],
             unique=True,
-            name="sent_notifications_unique_dose"
+            name="sent_notifications_unique_dose_kind"
         )
         logging.info("MongoDB indexes created successfully")
     except Exception as e:
@@ -1099,8 +1115,19 @@ async def send_push_to_tokens(
     if not valid:
         return {"sent": 0, "tickets": [], "removed_tokens": []}
 
+    # channelId: canal Android "medication-reminders" (importancia MAX) que la
+    # app crea al pedir el permiso; todo dispositivo con token registrado pasó
+    # por ahí. priority high: entrega inmediata aunque el teléfono esté en doze.
     messages = [
-        {"to": t, "title": title, "body": body, "sound": "default", "data": data or {}}
+        {
+            "to": t,
+            "title": title,
+            "body": body,
+            "sound": "default",
+            "priority": "high",
+            "channelId": "medication-reminders",
+            "data": data or {},
+        }
         for t in valid
     ]
 
@@ -1164,32 +1191,41 @@ def _normalize_hhmm(time_str: str) -> str:
     return time_str
 
 
-async def _notify_dose(med: dict, patient: dict, scheduled_datetime: str, now_utc: datetime) -> None:
-    """Envía el push de UNA dosis a los cuidadores del paciente, una sola vez.
-    No hace nada si la dosis ya fue marcada (alguien actuó) o ya fue notificada."""
+async def _notify_dose(
+    med: dict,
+    patient: dict,
+    scheduled_datetime: str,
+    now_utc: datetime,
+    kind: str = "main",
+) -> None:
+    """Envía el push de UNA dosis (principal o re-aviso) a los cuidadores del
+    paciente, una sola vez por `kind`. No hace nada si la dosis ya fue marcada
+    (alguien actuó) o si este envío ya salió."""
     med_id = str(med["_id"])
     patient_id = str(patient["_id"])
 
-    # 1) Si la dosis ya tiene log (tomada/omitida/perdida por cualquier cuidador),
-    #    ya se actuó: no tiene sentido recordar algo hecho.
+    # 1) Estado REAL en el momento de enviar: si la dosis ya tiene log (tomada/
+    #    omitida por CUALQUIER cuidador), no se envía nada. Esta consulta es la
+    #    que evita los re-avisos zombis que tenían las notificaciones locales.
     already_logged = await db.medication_logs.find_one(
         {"medication_id": med_id, "scheduled_datetime": scheduled_datetime}, {"_id": 1}
     )
     if already_logged:
         return
 
-    # 2) Tokens de los cuidadores. Si no hay, no reclamamos la dosis: si más tarde
-    #    (dentro de la ventana) aparece un token, podrá enviarse.
+    # 2) Tokens de los cuidadores. Si no hay, no reclamamos el envío: si más
+    #    tarde (dentro de la ventana) aparece un token, podrá enviarse.
     tokens = await get_patient_caregiver_tokens(patient_id)
     if not tokens:
         return
 
-    # 3) Reclamar la dosis ANTES de enviar (índice único = idempotencia real,
-    #    incluso si dos ejecuciones coincidieran). Si ya estaba reclamada, salir.
+    # 3) Reclamar el envío ANTES de mandarlo (índice único med+dosis+kind =
+    #    idempotencia real, incluso si dos ejecuciones coincidieran).
     try:
         await db.sent_notifications.insert_one({
             "medication_id": med_id,
             "scheduled_datetime": scheduled_datetime,
+            "kind": kind,
             "patient_id": patient_id,
             "sent_at": now_utc,
         })
@@ -1199,12 +1235,23 @@ async def _notify_dose(med: dict, patient: dict, scheduled_datetime: str, now_ut
     # 4) Enviar. Contenido en español (i18n de push: v2). El `data` lleva lo
     #    necesario para que al tocar la notificación la app navegue a la dosis.
     patient_name = patient.get("name", "")
+    med_name = med.get("name", "tu medicamento")
+    if kind == "main":
+        title = "MedControl"
+        body = f"Es hora de {med_name} — Paciente: {patient_name}"
+    else:
+        title = "⏰ Recordatorio pendiente"
+        body = (
+            f"Aún no se ha registrado {med_name} — Paciente: {patient_name}. "
+            "Márcala como tomada u omitida."
+        )
     await send_push_to_tokens(
         tokens,
-        "MedControl",
-        f"Es hora de {med.get('name', 'tu medicamento')} — Paciente: {patient_name}",
+        title,
+        body,
         data={
             "type": "dose",
+            "kind": kind,
             "patient_id": patient_id,
             "medication_id": med_id,
             "scheduled_datetime": scheduled_datetime,
@@ -1281,24 +1328,32 @@ async def run_scheduler_tick() -> None:
                 except (ValueError, TypeError):
                     continue
 
-                # Vence ahora si ya pasó la hora pero dentro de la ventana de
-                # gracia. Match por instante (no por string) para no perder una
-                # dosis si el tick se atrasa y cruza el minuto.
-                delta = (now_local - scheduled_local).total_seconds()
-                if not (0 <= delta < SCHEDULER_GRACE_SECONDS):
-                    continue
                 if base_local is not None and scheduled_local < base_local:
                     continue
 
                 scheduled_datetime = f"{today_str}T{normalized}:00"
-                try:
-                    await _notify_dose(med, patient, scheduled_datetime, now_utc)
-                except Exception as e:
-                    logging.error(
-                        f"[scheduler] error notificando dosis med={str(med['_id'])} "
-                        f"@{scheduled_datetime}: {e}",
-                        exc_info=True,
-                    )
+
+                # Cada envío (principal a T, re-avisos a T+10 y T+20) tiene su
+                # propia ventana de gracia. Match por instante (no por string)
+                # para no perder un envío si el tick se atrasa y cruza el
+                # minuto. _notify_dose consulta el estado real y la clave de
+                # idempotencia (med + dosis + kind) antes de mandar nada.
+                targets = [(0, "main")] + [
+                    (m, f"followup{m}") for m in FOLLOWUP_OFFSETS_MINUTES
+                ]
+                for offset_min, kind in targets:
+                    target_local = scheduled_local + timedelta(minutes=offset_min)
+                    delta = (now_local - target_local).total_seconds()
+                    if not (0 <= delta < SCHEDULER_GRACE_SECONDS):
+                        continue
+                    try:
+                        await _notify_dose(med, patient, scheduled_datetime, now_utc, kind)
+                    except Exception as e:
+                        logging.error(
+                            f"[scheduler] error notificando dosis med={str(med['_id'])} "
+                            f"@{scheduled_datetime} kind={kind}: {e}",
+                            exc_info=True,
+                        )
 
 
 async def scheduler_loop() -> None:
