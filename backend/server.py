@@ -210,6 +210,33 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logging.warning(f"Patient timezone migration warning: {e}")
 
+    # Migración recordatorios por cuidador: el toggle global
+    # notifications_enabled queda deprecado (el scheduler ya no lo lee) y se
+    # reemplaza por muted_by (lista de user_ids silenciados). Para preservar el
+    # comportamiento, un medicamento silenciado globalmente pasa a estar
+    # silenciado para TODOS los cuidadores actuales del paciente. Idempotente:
+    # solo procesa meds sin muted_by; después cada uno se reactiva a sí mismo.
+    try:
+        legacy = await db.medications.find(
+            {"notifications_enabled": False, "muted_by": {"$exists": False}},
+            {"patient_id": 1}
+        ).to_list(None)
+        for m in legacy:
+            patient = await db.patients.find_one(
+                {"_id": ObjectId(m["patient_id"])}, {"caregiver_ids": 1}
+            )
+            caregivers = (patient or {}).get("caregiver_ids", [])
+            await db.medications.update_one(
+                {"_id": m["_id"]}, {"$set": {"muted_by": caregivers}}
+            )
+        if legacy:
+            logging.info(
+                f"Migración muted_by: {len(legacy)} medicamentos silenciados "
+                "globalmente pasan a silencio por cuidador"
+            )
+    except Exception as e:
+        logging.warning(f"Medication muted_by migration warning: {e}")
+
     # Scheduler de push (Fase 3B): proceso interno cada minuto.
     # GUARD MULTI-WORKER: si algún día Render levanta varios workers
     # (WEB_CONCURRENCY>1), el scheduler debe correr en UNO SOLO para no duplicar
@@ -374,6 +401,11 @@ class MedicationUpdate(BaseModel):
         if v is not None:
             return validate_schedule_times(v)
         return v
+
+class RemindersToggle(BaseModel):
+    """Preferencia PERSONAL de recordatorios de un medicamento: silenciar o
+    reactivar los push (principal y re-avisos) SOLO para el usuario actual."""
+    enabled: bool
 
 class Medication(BaseModel):
     id: str
@@ -1081,16 +1113,22 @@ async def unregister_device(data: DeviceUnregister, user_id: str = Depends(get_c
     await db.devices.delete_one({"token": token, "user_id": user_id})
     return {"message": "Dispositivo eliminado"}
 
-async def get_patient_caregiver_tokens(patient_id: str) -> List[str]:
+async def get_patient_caregiver_tokens(
+    patient_id: str,
+    exclude_user_ids: Optional[List[str]] = None,
+) -> List[str]:
     """Todos los Expo push tokens de los cuidadores (dueño + aceptados) de un
-    paciente. Aún NO se usa (FASE 1 es solo registro); definido aquí para que la
-    fase de envío tenga claro el modelo de datos."""
+    paciente. `exclude_user_ids` permite dejar fuera a los cuidadores que
+    silenciaron el medicamento (preferencia personal `muted_by`)."""
     patient = await db.patients.find_one(
         {"_id": ObjectId(patient_id)}, {"caregiver_ids": 1}
     )
     if not patient:
         return []
     user_ids = patient.get("caregiver_ids", [])
+    if exclude_user_ids:
+        excluded = set(exclude_user_ids)
+        user_ids = [u for u in user_ids if u not in excluded]
     if not user_ids:
         return []
     devices = await db.devices.find(
@@ -1213,9 +1251,13 @@ async def _notify_dose(
     if already_logged:
         return
 
-    # 2) Tokens de los cuidadores. Si no hay, no reclamamos el envío: si más
-    #    tarde (dentro de la ventana) aparece un token, podrá enviarse.
-    tokens = await get_patient_caregiver_tokens(patient_id)
+    # 2) Tokens de los cuidadores, EXCLUYENDO a quienes silenciaron este
+    #    medicamento para sí mismos (muted_by). Si no queda ninguno, no
+    #    reclamamos el envío: si más tarde (dentro de la ventana) alguien se
+    #    reactiva o aparece un token, podrá enviarse.
+    tokens = await get_patient_caregiver_tokens(
+        patient_id, exclude_user_ids=med.get("muted_by") or []
+    )
     if not tokens:
         return
 
@@ -1271,10 +1313,11 @@ async def run_scheduler_tick() -> None:
     patient_ids = [str(p["_id"]) for p in patients]
 
     # Medicamentos activos y con notificaciones habilitadas de todos los pacientes.
+    # notifications_enabled (global, deprecado) ya NO se lee: la preferencia es
+    # por cuidador vía muted_by; _notify_dose excluye a los silenciados.
     medications = await db.medications.find({
         "patient_id": {"$in": patient_ids},
         "active": True,
-        "notifications_enabled": {"$ne": False},
     }).to_list(None)
     if not medications:
         return
@@ -1414,7 +1457,11 @@ async def get_medications(patient_id: str, user_id: str = Depends(get_current_us
             "instructions": m.get("instructions"),
             "refill_alert_days": m.get("refill_alert_days", 7),
             "active": m.get("active", True),
+            # Deprecado (era el toggle global); los APK viejos aún lo muestran.
             "notifications_enabled": m.get("notifications_enabled", True),
+            # Preferencia PERSONAL: si el usuario actual silenció este
+            # medicamento (muted_by), solo él deja de recibir los push.
+            "reminders_enabled_for_me": user_id not in (m.get("muted_by") or []),
             "created_at": m["created_at"].isoformat()
         }
         for m in medications
@@ -1447,12 +1494,17 @@ async def create_medication(medication: MedicationCreate, user_id: str = Depends
     med_dict = medication.dict()
     med_dict["schedule_times"] = normalized_times
     med_dict["created_at"] = datetime.now(timezone.utc)
-    
+    # El toggle de la creación es preferencia PERSONAL del creador: si lo apaga,
+    # se silencia solo para él (muted_by). El campo notifications_enabled se
+    # guarda pero está deprecado (el scheduler ya no lo lee).
+    med_dict["muted_by"] = [] if medication.notifications_enabled else [user_id]
+
     result = await db.medications.insert_one(med_dict)
     return {
         "id": str(result.inserted_id),
         **medication.dict(),
         "schedule_times": normalized_times,
+        "reminders_enabled_for_me": medication.notifications_enabled,
         "created_at": med_dict["created_at"].isoformat()
     }
 
@@ -1497,6 +1549,33 @@ async def update_medication(
         "active": updated.get("active", True),
         "created_at": updated["created_at"].isoformat()
     }
+
+@api_router.put("/medications/{medication_id}/reminders")
+async def set_my_reminders(
+    medication_id: str,
+    body: RemindersToggle,
+    user_id: str = Depends(get_current_user),
+):
+    """Silenciar/reactivar los recordatorios de este medicamento SOLO para el
+    usuario actual (preferencia personal: no requiere ser dueño, solo tener
+    acceso al paciente). El scheduler excluye de cada push (principal y
+    re-avisos) a los usuarios en muted_by."""
+    existing = await db.medications.find_one(
+        {"_id": ObjectId(medication_id)}, {"patient_id": 1}
+    )
+    if not existing:
+        raise HTTPException(status_code=404, detail="Medication not found")
+
+    patient = await db.patients.find_one({
+        "_id": ObjectId(existing["patient_id"]),
+        "caregiver_ids": user_id
+    }, {"_id": 1})
+    if not patient:
+        raise HTTPException(status_code=404, detail="Access denied")
+
+    op = {"$pull": {"muted_by": user_id}} if body.enabled else {"$addToSet": {"muted_by": user_id}}
+    await db.medications.update_one({"_id": ObjectId(medication_id)}, op)
+    return {"reminders_enabled_for_me": body.enabled}
 
 @api_router.delete("/medications/{medication_id}")
 async def delete_medication(medication_id: str, user_id: str = Depends(get_current_user)):
