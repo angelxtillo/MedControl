@@ -1,0 +1,24 @@
+# .easignore raíz del repo — es el ÚNICO que EAS lee (los .easignore/.gitignore
+# anidados NO se aplican al archive; el archive se empaqueta desde esta raíz).
+# CNG: EAS regenera android/ e ios/ con `expo prebuild`. No subir estado nativo
+# local (autolinking.json con rutas Windows -> "No variants exist" en Linux).
+
+node_modules/
+.git/
+.expo/
+.metro-cache/
+
+frontend/android/
+frontend/ios/
+
+# Credenciales: la firma la gestiona el keystore remoto de EAS
+frontend/@angelxtillo__medcontrol.jks
+*.jks
+*.keystore
+
+*.log
+.DS_Store
+.vscode/
+.idea/
+.claude/
+.emergent/
