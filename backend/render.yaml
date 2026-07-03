@@ -14,5 +14,3 @@ services:
         value: medcontrol_prod
       - key: JWT_SECRET
         generateValue: true
-      - key: EMERGENT_LLM_KEY
-        sync: false
