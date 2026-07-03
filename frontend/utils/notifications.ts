@@ -257,28 +257,58 @@ export async function cancelAllScheduledNotifications(): Promise<void> {
 // credenciales FCM), es no-op silencioso: las notificaciones LOCALES siguen
 // funcionando igual. Todavía no se envía push; esto solo guarda el token.
 export async function registerPushToken(): Promise<void> {
+  // Instrumentado con prefijo [push-token] para diagnosticar en adb logcat
+  // (tag ReactNativeJS) dónde muere el registro en builds standalone.
   try {
     const perm = await Notifications.getPermissionsAsync();
+    console.log(`[push-token] permiso: granted=${perm.granted} status=${perm.status}`);
     if (!perm.granted) return;
 
     const projectId =
       (Constants.expoConfig as any)?.extra?.eas?.projectId ??
       (Constants as any)?.easConfig?.projectId;
-    if (!projectId) {
-      console.warn('Sin EAS projectId: no se puede obtener el Expo push token');
+    console.log(`[push-token] projectId: ${projectId ?? 'NO DISPONIBLE'}`);
+    if (!projectId) return;
+
+    let token: string;
+    try {
+      const result = await Notifications.getExpoPushTokenAsync({ projectId });
+      token = result.data;
+      console.log(`[push-token] getExpoPushTokenAsync OK: ${token}`);
+    } catch (e: any) {
+      // Excepción completa: en builds sin google-services.json aquí sale
+      // "Default FirebaseApp is not initialized" (o similar de FCM).
+      console.warn(
+        `[push-token] getExpoPushTokenAsync FALLÓ: ${e?.message ?? e}`,
+        e?.code ?? '',
+        e,
+      );
+      return;
+    }
+    if (!token) {
+      console.warn('[push-token] token vacío, no se registra');
       return;
     }
 
-    const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId });
-    if (!token) return;
-
     const lastSent = await AsyncStorage.getItem(LAST_PUSH_TOKEN_KEY);
-    if (lastSent === token) return; // sin cambios: no reenviar
+    if (lastSent === token) {
+      console.log('[push-token] sin cambios (ya registrado), no se reenvía');
+      return;
+    }
 
-    await api.post('/devices', { token, platform: Platform.OS });
+    try {
+      const res = await api.post('/devices', { token, platform: Platform.OS });
+      console.log(`[push-token] POST /devices OK: status=${res.status}`);
+    } catch (e: any) {
+      console.warn(
+        `[push-token] POST /devices FALLÓ: status=${e?.response?.status ?? 'sin respuesta'}`,
+        e?.response?.data ?? e?.message ?? e,
+      );
+      return; // no cachear: así se reintenta en el próximo arranque/login
+    }
     await AsyncStorage.setItem(LAST_PUSH_TOKEN_KEY, token);
   } catch (e) {
-    console.warn('No se pudo registrar el push token:', e);
+    console.warn('[push-token] error inesperado:', e);
   }
 }
 
@@ -304,6 +334,15 @@ export async function unregisterPushToken(): Promise<void> {
 // re-registra el token y lo re-asocia al usuario correcto.
 export async function clearLocalPushToken(): Promise<void> {
   await AsyncStorage.removeItem(LAST_PUSH_TOKEN_KEY).catch(() => {});
+}
+
+// El home reconcilia las notificaciones locales contra el backend como mucho
+// cada cierto intervalo (ver home.tsx). Tras borrar un paciente o medicamento
+// se limpia esta marca para que la próxima visita al home reconcilie ya.
+export const LAST_RECONCILE_KEY = 'lastReconcile';
+
+export async function forceNextReconcile(): Promise<void> {
+  await AsyncStorage.removeItem(LAST_RECONCILE_KEY).catch(() => {});
 }
 
 export async function syncAllMedicationNotifications(

@@ -20,6 +20,10 @@ expo-env.d.ts
 *.mobileprovision
 
 # Signing credentials (NEVER commit)
+# google-services.json: config del cliente Firebase (necesaria para FCM).
+# Gitignored por precaución, pero SÍ viaja a EAS: el archive lo controla el
+# .easignore de la RAÍZ del repo, que no lo excluye.
+google-services.json
 keystore.properties
 android/keystore.properties
 android/app/keystore.properties

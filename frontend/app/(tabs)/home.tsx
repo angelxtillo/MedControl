@@ -15,7 +15,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { MedicationCard } from '../../components/MedicationCard';
 import api from '../../utils/api';
 import { useFocusEffect } from '@react-navigation/native';
-import { requestNotificationPermissions, registerPushToken, syncAllMedicationNotifications, MedicationForSchedule } from '../../utils/notifications';
+import { requestNotificationPermissions, registerPushToken, syncAllMedicationNotifications, MedicationForSchedule, LAST_RECONCILE_KEY } from '../../utils/notifications';
 import { useTranslation } from 'react-i18next';
 import Animated, { FadeInDown, FadeIn, ZoomIn } from 'react-native-reanimated';
 
@@ -101,9 +101,12 @@ export default function Home() {
   };
 
   const reconcileNotifications = async () => {
-    const RECONCILE_INTERVAL_MS = 6 * 60 * 60 * 1000;
+    // 15 min (antes 6 h): si otro cuidador borra un medicamento/paciente, este
+    // dispositivo solo se entera reconciliando; con 6 h sus recordatorios
+    // locales (incluidos los follow-ups de +10/+20) seguían sonando horas.
+    const RECONCILE_INTERVAL_MS = 15 * 60 * 1000;
     try {
-      const last = await AsyncStorage.getItem('lastReconcile');
+      const last = await AsyncStorage.getItem(LAST_RECONCILE_KEY);
       if (last && Date.now() - Number(last) < RECONCILE_INTERVAL_MS) {
         return;
       }
@@ -132,7 +135,7 @@ export default function Home() {
       );
       await syncAllMedicationNotifications(medsWithPatient);
       try {
-        await AsyncStorage.setItem('lastReconcile', String(Date.now()));
+        await AsyncStorage.setItem(LAST_RECONCILE_KEY, String(Date.now()));
       } catch (_) {}
     } catch (err) {
       console.warn('Error reconciliando notificaciones:', err);
