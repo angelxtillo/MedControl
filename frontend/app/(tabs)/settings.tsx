@@ -54,21 +54,6 @@ export default function SettingsScreen() {
     );
   };
 
-  // TEMPORAL / DEV (Fase 2): dispara un push de prueba al propio dispositivo
-  // para verificar la entrega de punta a punta. Quitar antes del release final.
-  const handleTestPush = async () => {
-    try {
-      const res = await api.post('/devices/test-push');
-      const d = res.data || {};
-      Alert.alert(
-        'Push de prueba',
-        `Enviados: ${d.sent ?? 0}\nTickets: ${d.tickets?.length ?? 0}\nTokens muertos eliminados: ${d.removed_tokens?.length ?? 0}`,
-      );
-    } catch (e: any) {
-      Alert.alert('Push de prueba', e?.response?.data?.detail || 'No se pudo enviar el push de prueba');
-    }
-  };
-
   const handleConfirmDelete = async () => {
     if (!deletePassword.trim()) {
       Alert.alert(t('common.error'), t('settings.deleteAccount.passwordRequired'));
@@ -269,15 +254,6 @@ export default function SettingsScreen() {
             iconColor="#2196F3"
           />
 
-          {/* TEMPORAL / DEV (Fase 2): prueba de envío de push. Quitar antes del release final. */}
-          <MenuItem
-            icon="notifications"
-            title="[DEV] Enviar push de prueba"
-            subtitle="Temporal — verificar entrega de notificaciones"
-            onPress={handleTestPush}
-            iconBg="#FFF3E0"
-            iconColor="#FB8C00"
-          />
 
           <MenuItem
             icon="log-out"
