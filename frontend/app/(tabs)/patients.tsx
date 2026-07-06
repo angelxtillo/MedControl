@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { PatientCard } from '../../components/PatientCard';
 import { router, useFocusEffect } from 'expo-router';
+import { useRefreshOnResume } from '../../hooks/useRefreshOnResume';
 import api from '../../utils/api';
 import * as ImagePicker from 'expo-image-picker';
 import { useTranslation } from 'react-i18next';
@@ -42,11 +43,23 @@ export default function Patients() {
   const [photo, setPhoto] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  const lastRefresh = useRef(0);
+
+  // Revalidar al foco (throttle 30s) y al volver de background (>60s o cambio
+  // de día). Las recargas explícitas (guardar paciente, pull-to-refresh)
+  // llaman a loadPatients() directo y no pasan por el throttle.
   useFocusEffect(
     useCallback(() => {
+      if (Date.now() - lastRefresh.current < 30000) return;
+      lastRefresh.current = Date.now();
       loadPatients();
     }, [])
   );
+
+  useRefreshOnResume(() => {
+    lastRefresh.current = Date.now();
+    loadPatients();
+  });
 
   const loadPatients = async () => {
     try {

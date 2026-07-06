@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -16,7 +16,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, router } from 'expo-router';
+import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
+import { useRefreshOnResume } from '../../hooks/useRefreshOnResume';
 import api from '../../utils/api';
 import CaregiversManager from '../../components/CaregiversManager';
 import { useTranslation } from 'react-i18next';
@@ -65,9 +66,26 @@ export default function PatientDetail() {
   const [tzPickerVisible, setTzPickerVisible] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
+  const lastRefresh = useRef(0);
+  const loadedId = useRef<string | null>(null);
+
+  // Cargar al montar y revalidar al recuperar el foco (p. ej. al volver de
+  // editar un medicamento), con throttle de 30s; si cambia el id se recarga
+  // siempre. Los datos ya visibles se mantienen mientras llega la respuesta.
+  useFocusEffect(
+    useCallback(() => {
+      const sameId = loadedId.current === id;
+      if (sameId && Date.now() - lastRefresh.current < 30000) return;
+      loadedId.current = id as string;
+      lastRefresh.current = Date.now();
+      loadPatientData();
+    }, [id])
+  );
+
+  useRefreshOnResume(() => {
+    lastRefresh.current = Date.now();
     loadPatientData();
-  }, [id]);
+  });
 
   // Sincronizar datos del paciente con el formulario de edición
   useEffect(() => {

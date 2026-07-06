@@ -15,6 +15,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { MedicationCard } from '../../components/MedicationCard';
 import api from '../../utils/api';
 import { useFocusEffect } from '@react-navigation/native';
+import { useRefreshOnResume } from '../../hooks/useRefreshOnResume';
 import { requestNotificationPermissions, registerPushToken } from '../../utils/notifications';
 import { useTranslation } from 'react-i18next';
 import Animated, { FadeInDown, FadeIn, ZoomIn } from 'react-native-reanimated';
@@ -73,6 +74,12 @@ export default function Home() {
       loadDashboard();
     }, [])
   );
+
+  // Al volver de background (>60s o con cambio de día) los datos en pantalla
+  // pueden estar congelados: forzar revalidación saltando el debounce de 30s.
+  // El re-render resultante también recalcula la fecha del encabezado y
+  // "próxima dosis", que se derivan de new Date() en el render.
+  useRefreshOnResume(() => loadDashboard(true));
 
   const loadDashboard = async (force = false) => {
     if (!force && Date.now() - lastLoad.current < 30000) {

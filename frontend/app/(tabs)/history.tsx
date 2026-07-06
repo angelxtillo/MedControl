@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
+import { useRefreshOnResume } from '../../hooks/useRefreshOnResume';
 import api from '../../utils/api';
 import { format } from 'date-fns';
 import { es, enUS, ptBR, fr as frLocale } from 'date-fns/locale';
@@ -63,11 +64,28 @@ export default function History() {
   const [isLoading, setIsLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
+  const lastRefresh = useRef(0);
+
+  // Revalidar al foco y al volver de background, con throttle de 30s para no
+  // duplicar requests al navegar rápido entre tabs. El resume salta el throttle
+  // (el hook ya exige >60s en background o cambio de día).
   useFocusEffect(
     useCallback(() => {
-      loadPatients();
-    }, [])
+      if (Date.now() - lastRefresh.current < 30000) return;
+      refreshData();
+    }, [selectedPatient])
   );
+
+  useRefreshOnResume(() => refreshData());
+
+  const refreshData = () => {
+    lastRefresh.current = Date.now();
+    loadPatients();
+    if (selectedPatient) {
+      // Revalidación en background: mantener los logs visibles, sin spinner.
+      loadHistoryForPatient(selectedPatient, { silent: true });
+    }
+  };
 
   const loadPatients = async () => {
     try {
@@ -82,8 +100,8 @@ export default function History() {
     }
   };
 
-  const loadHistoryForPatient = async (patientId: string) => {
-    setIsLoading(true);
+  const loadHistoryForPatient = async (patientId: string, opts: { silent?: boolean } = {}) => {
+    if (!opts.silent) setIsLoading(true);
     try {
       const offset = new Date().getTimezoneOffset() * -1;
       const [logsResponse, medsResponse] = await Promise.all([
@@ -95,7 +113,9 @@ export default function History() {
       setLogs(logsResponse.data);
       setMedications(medsResponse.data);
     } catch (error) {
-      Alert.alert(t('common.error'), t('history.errorLoadHistory'));
+      // En revalidación silenciosa se conservan los datos ya visibles; no
+      // interrumpir con una alerta por un fallo de red en background.
+      if (!opts.silent) Alert.alert(t('common.error'), t('history.errorLoadHistory'));
     } finally {
       setIsLoading(false);
       setRefreshing(false);
@@ -105,7 +125,9 @@ export default function History() {
   const onRefresh = () => {
     setRefreshing(true);
     if (selectedPatient) {
-      loadHistoryForPatient(selectedPatient);
+      // silent: el RefreshControl ya indica la recarga; no reemplazar la lista
+      // por el spinner de pantalla completa.
+      loadHistoryForPatient(selectedPatient, { silent: true });
     } else {
       loadPatients();
     }
