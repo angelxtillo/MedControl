@@ -18,6 +18,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
+import { TermsCheckbox } from '../components/TermsCheckbox';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -81,6 +82,7 @@ export default function Index() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [loading, setLoading] = useState(false);
   const [checkingOnboarding, setCheckingOnboarding] = useState(true);
 
@@ -177,13 +179,18 @@ export default function Index() {
       return;
     }
 
+    if (!isLogin && !acceptedTerms) {
+      Alert.alert(t('common.error'), t('legal.mustAccept'));
+      return;
+    }
+
     setLoading(true);
     try {
       if (isLogin) {
         await login(trimmedEmail, password);
         router.replace('/(tabs)/home');
       } else {
-        const result = await register(name, trimmedEmail, password);
+        const result = await register(name, trimmedEmail, password, acceptedTerms);
         if (result.requiresVerification && result.email) {
           setVerificationEmail(result.email);
           setShowVerification(true);
@@ -413,10 +420,17 @@ export default function Index() {
               <Text style={styles.passwordHint}>{t('auth.passwordHint')}</Text>
             )}
 
+            {!isLogin && (
+              <TermsCheckbox
+                checked={acceptedTerms}
+                onToggle={() => setAcceptedTerms(v => !v)}
+              />
+            )}
+
             <TouchableOpacity
-              style={[styles.button, loading && styles.buttonDisabled]}
+              style={[styles.button, (loading || (!isLogin && !acceptedTerms)) && styles.buttonDisabled]}
               onPress={handleSubmit}
-              disabled={loading}
+              disabled={loading || (!isLogin && !acceptedTerms)}
             >
               <Text style={styles.buttonText}>
                 {loading ? t('auth.processing') : (isLogin ? t('auth.login') : t('auth.register'))}
@@ -425,7 +439,7 @@ export default function Index() {
 
             <TouchableOpacity
               style={styles.switchButton}
-              onPress={() => setIsLogin(!isLogin)}
+              onPress={() => { setIsLogin(!isLogin); setAcceptedTerms(false); }}
             >
               <Text style={styles.switchText}>
                 {isLogin ? `${t('auth.noAccount')} ${t('auth.register')}` : `${t('auth.hasAccount')} ${t('auth.login')}`}

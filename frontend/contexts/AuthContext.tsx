@@ -16,6 +16,9 @@ interface User {
   id: string;
   name: string;
   email: string;
+  // null = usuario antiguo que aún no ha aceptado los términos (gate pendiente).
+  accepted_terms_at?: string | null;
+  terms_version?: string | null;
 }
 
 interface RegisterResult {
@@ -28,9 +31,10 @@ interface AuthContextType {
   user: User | null;
   token: string | null;
   login: (email: string, password: string) => Promise<void>;
-  register: (name: string, email: string, password: string) => Promise<RegisterResult>;
+  register: (name: string, email: string, password: string, acceptedTerms: boolean) => Promise<RegisterResult>;
   verifyEmail: (email: string, code: string) => Promise<void>;
   resendVerification: (email: string) => Promise<number | undefined>;
+  acceptTerms: () => Promise<void>;
   logout: () => Promise<void>;
   deleteAccount: (password: string) => Promise<void>;
   loading: boolean;
@@ -77,12 +81,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const storedUser = await AsyncStorage.getItem('user');
       if (storedToken && storedUser) {
         try {
-          await axios.get(`${API_URL}/api/patients`, {
+          // Validar la sesión y, de paso, refrescar el estado de aceptación de
+          // términos: los usuarios antiguos tienen en almacenamiento un `user`
+          // sin accepted_terms_at, y el gate necesita ese dato para decidir si
+          // debe mostrarse. /auth/me devuelve el usuario actualizado.
+          const meRes = await axios.get(`${API_URL}/api/auth/me`, {
             headers: { Authorization: `Bearer ${storedToken}` },
             timeout: 60000,
           });
+          const freshUser = meRes.data?.user ?? JSON.parse(storedUser);
+          await AsyncStorage.setItem('user', JSON.stringify(freshUser));
           setToken(storedToken);
-          setUser(JSON.parse(storedUser));
+          setUser(freshUser);
           // Sesión válida al arrancar: registrar/actualizar el push token.
           registerPushToken().catch(() => {});
         } catch (err: any) {
@@ -121,13 +131,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const register = async (name: string, email: string, password: string): Promise<RegisterResult> => {
+  const register = async (name: string, email: string, password: string, acceptedTerms: boolean): Promise<RegisterResult> => {
     try {
       const normalizedEmail = email.trim().toLowerCase();
       const response = await axios.post(`${API_URL}/api/auth/register`, {
         name,
         email: normalizedEmail,
         password,
+        accepted_terms: acceptedTerms,
       }, { timeout: 60000 });
 
       if (response.data.requires_verification) {
@@ -180,6 +191,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const acceptTerms = async () => {
+    // Usuario existente que acepta desde el gate. Persiste en backend y
+    // actualiza el user en memoria y almacenamiento para que el gate desaparezca.
+    const currentToken = token || (await AsyncStorage.getItem('token'));
+    const response = await axios.post(
+      `${API_URL}/api/auth/accept-terms`,
+      {},
+      { headers: { Authorization: `Bearer ${currentToken}` }, timeout: 60000 },
+    );
+    setUser((prev) => {
+      const next = prev
+        ? { ...prev, accepted_terms_at: response.data.accepted_terms_at, terms_version: response.data.terms_version }
+        : prev;
+      if (next) AsyncStorage.setItem('user', JSON.stringify(next)).catch(() => {});
+      return next;
+    });
+  };
+
   const logout = async () => {
     // Cancelar las notificaciones locales antes de limpiar la sesión para que los
     // recordatorios de esta cuenta no sigan sonando tras salir / entrar a otra.
@@ -225,7 +254,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, login, register, verifyEmail, resendVerification, logout, deleteAccount, loading }}>
+    <AuthContext.Provider value={{ user, token, login, register, verifyEmail, resendVerification, acceptTerms, logout, deleteAccount, loading }}>
       {children}
     </AuthContext.Provider>
   );

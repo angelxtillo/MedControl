@@ -55,6 +55,18 @@
     "codeExpiredResend": "Le code a expiré. Demandez-en un nouveau.",
     "backToLogin": "← Retour à la connexion"
   },
+  "legal": {
+    "acceptPrefix": "J'ai lu et j'accepte les ",
+    "termsLink": "Conditions Générales",
+    "acceptMiddle": " et la ",
+    "privacyLink": "Politique de Confidentialité",
+    "acceptSuffix": ".",
+    "mustAccept": "Vous devez accepter les Conditions Générales et la Politique de Confidentialité pour continuer.",
+    "acceptError": "Nous n'avons pas pu enregistrer votre acceptation. Veuillez réessayer.",
+    "gateTitle": "Nous avons mis à jour nos conditions",
+    "gateBody": "Pour continuer à utiliser MedControl, veuillez consulter et accepter les Conditions Générales et la Politique de Confidentialité.",
+    "gateAccept": "Accepter et continuer"
+  },
   "onboarding": {
     "slide1Title": "Organisez les médicaments",
     "slide1Desc": "Enregistrez tous les médicaments de vos patients en un seul endroit. Noms, doses, horaires et plus.",
@@ -355,6 +367,7 @@
     "account": "Compte",
     "version": "Version",
     "privacyPolicy": "Politique de Confidentialité",
+    "termsConditions": "Conditions Générales",
     "comingSoon": "Bientôt",
     "comingSoonDesc": "Cette fonctionnalité sera bientôt disponible",
     "deleteAccount": {

@@ -4,6 +4,7 @@ import { Stack, router, useSegments } from 'expo-router';
 import { AuthProvider } from '../contexts/AuthContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
+import { TermsGate } from '../components/TermsGate';
 
 // Route groups that require a valid session. Public routes (index/login,
 // onboarding) are intentionally excluded so the guard never interrupts them.
@@ -22,6 +23,7 @@ function AppStack() {
     }
   }, [user, loading, segments]);
   return (
+    <>
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />
       <Stack.Screen name="onboarding" />
@@ -65,6 +67,10 @@ function AppStack() {
         }}
       />
     </Stack>
+    {/* Gate de aceptación: capa bloqueante para usuarios con sesión que aún no
+        han aceptado los términos. Se renderiza sobre cualquier ruta. */}
+    <TermsGate />
+    </>
   );
 }
 

@@ -22,6 +22,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
 import { changeLanguage, availableLanguages, getCurrentLanguage } from '../../i18n';
 import api from '../../utils/api';
+import { PRIVACY_POLICY_URL, TERMS_URL } from '../../utils/legal';
 
 export default function SettingsScreen() {
   const { t } = useTranslation();
@@ -239,6 +240,22 @@ export default function SettingsScreen() {
             subtitle={t('settings.contactSupportDesc')}
             onPress={() => Linking.openURL('mailto:support.medcontrol@gmail.com?subject=Soporte%20MedControl')}
           />
+
+          <MenuItem
+            icon="shield-checkmark"
+            title={t('settings.privacyPolicy')}
+            onPress={() => Linking.openURL(PRIVACY_POLICY_URL)}
+            iconBg="#F3E5F5"
+            iconColor="#9C27B0"
+          />
+
+          <MenuItem
+            icon="document-text"
+            title={t('settings.termsConditions')}
+            onPress={() => Linking.openURL(TERMS_URL)}
+            iconBg="#E8EAF6"
+            iconColor="#3F51B5"
+          />
         </View>
 
         {/* Sección de Cuenta */}
@@ -373,10 +390,18 @@ export default function SettingsScreen() {
 
               <TouchableOpacity
                 style={styles.privacyButton}
-                onPress={() => Linking.openURL('https://angelxtillo.github.io/MedControl/privacy-policy.html')}
+                onPress={() => Linking.openURL(PRIVACY_POLICY_URL)}
               >
                 <Ionicons name="document-text-outline" size={18} color="#1565C0" />
                 <Text style={styles.privacyButtonText}>{t('settings.privacyPolicy')}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.privacyButton}
+                onPress={() => Linking.openURL(TERMS_URL)}
+              >
+                <Ionicons name="document-text-outline" size={18} color="#1565C0" />
+                <Text style={styles.privacyButtonText}>{t('settings.termsConditions')}</Text>
               </TouchableOpacity>
 
               <View style={styles.modalFooterSpace} />
