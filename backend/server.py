@@ -101,6 +101,11 @@ USER_ACTION_WINDOW = 3600  # 1 hora
 # el frontend muestre un contador alineado, sin hardcodear su propio valor.
 EMAIL_CODE_TTL_MINUTES = 10
 
+# Versión vigente de los Términos y Condiciones / Política de Privacidad
+# publicados en GitHub Pages. Se guarda por usuario al aceptar; si se publica
+# una revisión que exija re-aceptación, incrementar este valor.
+TERMS_VERSION = "1.0"
+
 def get_client_ip(request: Request) -> str:
     """Obtener IP real del cliente considerando proxies (Render)"""
     forwarded = request.headers.get("x-forwarded-for")
@@ -287,6 +292,9 @@ class CaregiverCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     email: EmailStr
     password: str
+    # Aceptación explícita de Términos y Condiciones + Política de Privacidad.
+    # El registro se rechaza si no viene en true (el checkbox de la app lo exige).
+    accepted_terms: bool = False
 
     @field_validator('password')
     @classmethod
@@ -646,6 +654,19 @@ async def send_verification_email(to_email: str, code: str) -> bool:
         return False
 
 # ============= AUTH ENDPOINTS =============
+def public_user(user: dict) -> dict:
+    """Representación del usuario para el frontend. Incluye el estado de
+    aceptación de términos para que la app sepa si debe mostrar el gate de
+    aceptación (usuarios antiguos sin accepted_terms_at)."""
+    accepted_at = user.get("accepted_terms_at")
+    return {
+        "id": str(user["_id"]),
+        "name": user["name"],
+        "email": user["email"],
+        "accepted_terms_at": accepted_at.isoformat() if accepted_at else None,
+        "terms_version": user.get("terms_version"),
+    }
+
 @api_router.post("/auth/register")
 async def register(caregiver: CaregiverCreate, request: Request):
     ip = get_client_ip(request)
@@ -655,6 +676,12 @@ async def register(caregiver: CaregiverCreate, request: Request):
             status_code=429,
             detail=rate_limit_message(retry_after),
             headers={"Retry-After": str(retry_after)},
+        )
+
+    if not caregiver.accepted_terms:
+        raise HTTPException(
+            status_code=400,
+            detail="Debes aceptar los Términos y Condiciones y la Política de Privacidad",
         )
 
     email = normalize_email(caregiver.email)
@@ -670,6 +697,8 @@ async def register(caregiver: CaregiverCreate, request: Request):
         "email": email,
         "password_hash": hash_password(caregiver.password),
         "email_verified": False,
+        "accepted_terms_at": datetime.now(timezone.utc),
+        "terms_version": TERMS_VERSION,
         "created_at": datetime.now(timezone.utc)
     }
     result = await db.caregivers.insert_one(user_dict)
@@ -749,16 +778,16 @@ async def verify_email(data: VerifyEmailRequest, request: Request):
     # Eliminar verificación usada
     await db.email_verifications.delete_many({"email": email})
 
+    # Recargar el usuario ya verificado para reflejar accepted_terms_at (fijado
+    # en el registro) en la respuesta.
+    user = await db.caregivers.find_one({"_id": user["_id"]})
+
     # Crear token
     token = create_access_token({"sub": str(user["_id"])})
 
     return {
         "token": token,
-        "user": {
-            "id": str(user["_id"]),
-            "name": user["name"],
-            "email": user["email"]
-        }
+        "user": public_user(user),
     }
 
 @api_router.post("/auth/resend-verification")
@@ -840,11 +869,39 @@ async def login(credentials: CaregiverLogin, request: Request):
 
     return {
         "token": token,
-        "user": {
-            "id": str(user["_id"]),
-            "name": user["name"],
-            "email": user["email"]
-        }
+        "user": public_user(user),
+    }
+
+@api_router.get("/auth/me")
+async def get_me(user_id: str = Depends(get_current_user)):
+    """Datos del usuario autenticado, incluido el estado de aceptación de
+    términos. La app lo consulta al arrancar con sesión guardada para decidir
+    si muestra el gate de aceptación (usuarios antiguos sin accepted_terms_at,
+    cuyo objeto `user` en almacenamiento local es de un formato previo)."""
+    user = await db.caregivers.find_one({"_id": ObjectId(user_id)})
+    if not user:
+        raise HTTPException(status_code=404, detail="Cuidador no encontrado")
+    return {"user": public_user(user)}
+
+@api_router.post("/auth/accept-terms")
+async def accept_terms(user_id: str = Depends(get_current_user)):
+    """Registra la aceptación de Términos y Condiciones + Política de Privacidad
+    para un usuario ya autenticado. Lo usan los usuarios EXISTENTES que se
+    registraron antes de que la aceptación fuera obligatoria: la app les muestra
+    un gate bloqueante y llama aquí. Idempotente: siempre deja la aceptación
+    fijada a la versión vigente."""
+    user = await db.caregivers.find_one({"_id": ObjectId(user_id)})
+    if not user:
+        raise HTTPException(status_code=404, detail="Cuidador no encontrado")
+
+    accepted_at = datetime.now(timezone.utc)
+    await db.caregivers.update_one(
+        {"_id": ObjectId(user_id)},
+        {"$set": {"accepted_terms_at": accepted_at, "terms_version": TERMS_VERSION}},
+    )
+    return {
+        "accepted_terms_at": accepted_at.isoformat(),
+        "terms_version": TERMS_VERSION,
     }
 
 @api_router.delete("/auth/me")
