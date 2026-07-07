@@ -47,6 +47,15 @@
       letter-spacing: 0.8px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
+    h3 {
+      font-size: 14px;
+      font-weight: bold;
+      color: #222;
+      margin: 18px 0 8px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
     p {
       margin-bottom: 14px;
       color: #333;
@@ -83,26 +92,6 @@
       margin: 0;
       font-size: 14px;
     }
-    .delete-block {
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      padding: 18px 20px;
-      margin: 12px 0;
-      background: #fafafa;
-    }
-    .delete-block h3 {
-      font-size: 14px;
-      font-weight: bold;
-      color: #222;
-      margin-bottom: 8px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-    .delete-block p {
-      font-size: 14px;
-      margin: 0;
-    }
     a { color: #2c3e50; }
     .contact-block {
       border-top: 1px solid #ddd;
@@ -135,188 +124,213 @@
 <div style="max-width:720px; margin:0 auto; padding: 0 20px;">
   <header>
     <h1>MedControl — Política de Privacidad</h1>
-    <p>Última actualización: 3 de junio de 2026</p>
+    <p>Última actualización: 6 de julio de 2026</p>
   </header>
 </div>
 
 <div class="container">
 
   <div class="section">
-    <h2>1. Quiénes somos</h2>
     <p>
-      MedControl es una aplicación móvil desarrollada por Angel Gabriel Portillo Chaustre, 
-      estudiante de Ingeniería en Tecnologías de la Información y las Comunicaciones 
-      en San José de Cúcuta, Colombia.
+      Esta Política de Privacidad describe cómo MedControl ("la Aplicación", "nosotros")
+      recopila, usa, almacena y protege la información de sus usuarios. Al crear una
+      cuenta o usar la Aplicación, usted acepta las prácticas descritas en este documento.
     </p>
     <p>
-      Esta app nació de una situación personal: mi hermana necesita tomar varios 
-      medicamentos al día en horarios distintos, y busqué una forma sencilla de 
-      ayudarla a no olvidar ninguna dosis. Al no encontrar una solución que se 
-      adaptara bien a lo que necesitábamos, decidí crearla. Con el tiempo se convirtió 
-      también en mi proyecto de tesis universitaria. MedControl es gratuita y 
-      seguirá siéndolo.
+      <strong>Responsable del tratamiento:</strong> Angel Portillo (desarrollador
+      independiente), Cúcuta, Colombia. Contacto:
+      <a href="mailto:support.medcontrol@gmail.com">support.medcontrol@gmail.com</a>.
     </p>
+  </div>
+
+  <hr>
+
+  <div class="section">
+    <h2>1. Información que recopilamos</h2>
+
+    <h3>1.1 Datos de cuenta (del cuidador)</h3>
+    <ul>
+      <li>Nombre.</li>
+      <li>Correo electrónico (usado para inicio de sesión y verificación de cuenta).</li>
+      <li>Contraseña (almacenada de forma cifrada mediante hash; nunca en texto plano).</li>
+    </ul>
+
+    <h3>1.2 Datos de pacientes (ingresados por el cuidador)</h3>
+    <p>
+      La función central de la Aplicación es ayudar a cuidadores a gestionar la
+      medicación de pacientes a su cargo. El cuidador puede ingresar sobre cada paciente:
+    </p>
+    <ul>
+      <li>Nombre y edad.</li>
+      <li>Notas y fotografía (opcionales).</li>
+      <li>Zona horaria del paciente (para calcular los horarios de las dosis correctamente).</li>
+      <li>Medicamentos: nombre, dosis, frecuencia y horarios.</li>
+      <li>Historial de tomas: registros de dosis tomadas, omitidas o perdidas, con fecha y hora.</li>
+    </ul>
     <div class="warning-note">
       <p>
-        <strong>Aviso médico:</strong> MedControl es una herramienta de apoyo para 
-        recordatorios de medicamentos. No reemplaza el consejo, diagnóstico ni 
-        tratamiento de un profesional de la salud. Consulte siempre a su médico 
-        antes de tomar decisiones médicas.
+        <strong>Importante:</strong> estos datos pueden corresponder a una persona
+        distinta del usuario (el paciente). Al ingresarlos, el cuidador declara contar
+        con la autorización del paciente o de su representante legal para gestionarlos,
+        o actuar en el marco de una relación legítima de cuidado (familiar, asistencial
+        o profesional).
       </p>
     </div>
-  </div>
 
-  <hr>
-
-  <div class="section">
-    <h2>2. Información que recopilamos</h2>
-    <p>Recopilamos únicamente la información que el usuario proporciona directamente:</p>
+    <h3>1.3 Datos técnicos</h3>
     <ul>
-      <li><strong>Datos de cuenta:</strong> nombre completo y correo electrónico, necesarios para el registro e inicio de sesión.</li>
-      <li><strong>Datos de pacientes:</strong> nombre, edad y notas que el cuidador registra voluntariamente.</li>
-      <li><strong>Datos de medicamentos:</strong> nombre, dosis, frecuencia y horarios introducidos por el usuario.</li>
-      <li><strong>Historial de tomas:</strong> registros de cuando una dosis fue marcada como tomada, saltada o perdida.</li>
-      <li><strong>Correos de invitación:</strong> el email ingresado para invitar a otro cuidador al sistema.</li>
+      <li>Token de notificaciones del dispositivo (identificador anónimo necesario para enviarle notificaciones push).</li>
+      <li>Registros técnicos del servidor (fecha, hora y resultado de las operaciones) con fines de seguridad y diagnóstico.</li>
     </ul>
-    <div class="note">
-      <p>No recopilamos ubicación GPS, contactos del teléfono, historial de navegación, datos biométricos ni información de pago.</p>
-    </div>
-  </div>
 
-  <hr>
-
-  <div class="section">
-    <h2>3. Uso de la información</h2>
-    <p>Los datos recopilados se usan exclusivamente para:</p>
+    <h3>1.4 Lo que NO recopilamos</h3>
     <ul>
-      <li>Permitir el acceso a la cuenta del usuario.</li>
-      <li>Mostrar los medicamentos y recordatorios configurados por el propio usuario.</li>
-      <li>Enviar correos de invitación a otros cuidadores cuando el usuario lo solicita.</li>
-      <li>Generar el historial de tomas para seguimiento personal.</li>
-    </ul>
-    <p>
-      No vendemos, compartimos ni comercializamos los datos de los usuarios 
-      con terceros, anunciantes ni ninguna otra entidad.
-    </p>
-  </div>
-
-  <hr>
-
-  <div class="section">
-    <h2>4. Almacenamiento y seguridad</h2>
-    <p>
-      Los datos se almacenan en MongoDB Atlas (MongoDB, Inc., servidores en 
-      Estados Unidos). El servidor backend opera a través de Render 
-      (Render Services, Inc.). La comunicación entre la app y el servidor 
-      se realiza mediante HTTPS.
-    </p>
-    <div class="warning-note">
-      <p>
-        <strong>Limitación importante:</strong> MedControl es un proyecto personal 
-        y académico mantenido por una sola persona con recursos limitados. No cuenta 
-        con equipos de seguridad, auditorías profesionales, seguros de responsabilidad 
-        civil ni capacidad de respuesta ante incidentes a escala empresarial. Se toman 
-        medidas razonables para proteger los datos, pero no es posible garantizar 
-        seguridad absoluta. Al usar esta aplicación, el usuario acepta que el 
-        desarrollador no será responsable por pérdidas, filtraciones o accesos no 
-        autorizados derivados de vulnerabilidades fuera de su control.
-      </p>
-    </div>
-  </div>
-
-  <hr>
-
-  <div class="section">
-    <h2>5. Servicios de terceros</h2>
-    <p>La aplicación utiliza los siguientes servicios externos, cada uno con su propia política de privacidad:</p>
-    <ul>
-      <li><strong>MongoDB Atlas</strong> — almacenamiento de datos. <a href="https://www.mongodb.com/legal/privacy-policy" target="_blank">Ver política</a></li>
-      <li><strong>Render</strong> — servidor backend. <a href="https://render.com/privacy" target="_blank">Ver política</a></li>
-      <li><strong>SendGrid (Twilio)</strong> — envío de emails de invitación. <a href="https://www.twilio.com/en-us/legal/privacy" target="_blank">Ver política</a></li>
-      <li><strong>Expo / EAS</strong> — distribución de la app. <a href="https://expo.dev/privacy" target="_blank">Ver política</a></li>
+      <li>No recopilamos ubicación GPS.</li>
+      <li>No usamos herramientas de analítica publicitaria ni rastreadores de terceros.</li>
+      <li>No mostramos publicidad ni vendemos datos.</li>
+      <li>No recopilamos datos de pago (las donaciones voluntarias se procesan íntegramente en plataformas externas: PayPal, Ko-fi o Nequi, según sus propias políticas).</li>
     </ul>
   </div>
 
   <hr>
 
   <div class="section">
-    <h2>6. Derechos del usuario</h2>
-    <p>De acuerdo con la Ley 1581 de 2012 (Protección de Datos Personales de Colombia), el usuario tiene derecho a:</p>
+    <h2>2. Para qué usamos la información</h2>
     <ul>
-      <li>Acceder a los datos registrados en la aplicación.</li>
-      <li>Corregir información incorrecta desde la propia app.</li>
-      <li>Solicitar la eliminación de su cuenta y datos (ver sección 7).</li>
-      <li>Solicitar una copia de sus datos escribiendo al correo de contacto.</li>
+      <li><strong>Prestar el servicio:</strong> mostrar los medicamentos y horarios, calcular dosis, registrar el historial y coordinar el cuidado entre varios cuidadores autorizados.</li>
+      <li><strong>Enviar notificaciones:</strong> recordatorios de dosis y avisos de dosis pendientes a los dispositivos de los cuidadores del paciente.</li>
+      <li><strong>Gestionar la cuenta:</strong> verificación del correo al registrarse, inicio de sesión y recuperación.</li>
+      <li><strong>Seguridad:</strong> prevención de accesos no autorizados, límites contra abuso (rate limiting) y diagnóstico de errores.</li>
+    </ul>
+    <p>
+      No usamos la información para publicidad, perfilado comercial ni fines distintos
+      de los descritos.
+    </p>
+  </div>
+
+  <hr>
+
+  <div class="section">
+    <h2>3. Con quién se comparte la información</h2>
+
+    <h3>3.1 Otros cuidadores (función central de la Aplicación)</h3>
+    <p>
+      Los datos de un paciente (incluidos sus medicamentos e historial) son visibles
+      para todos los cuidadores autorizados de ese paciente. Un cuidador se autoriza
+      únicamente mediante invitación con código generada por el responsable principal
+      (quien creó el paciente). Cada cuidador puede desvincularse cuando lo desee.
+    </p>
+
+    <h3>3.2 Proveedores de infraestructura (encargados del tratamiento)</h3>
+    <p>
+      Para operar, la Aplicación utiliza servicios de terceros que procesan datos por
+      cuenta nuestra:
+    </p>
+    <ul>
+      <li><strong>Render</strong> (EE. UU.): alojamiento del servidor de la Aplicación.</li>
+      <li><strong>MongoDB Atlas</strong> (EE. UU./nube): almacenamiento de la base de datos.</li>
+      <li><strong>Twilio SendGrid</strong> (EE. UU.): envío de correos de verificación.</li>
+      <li><strong>Expo / Google Firebase Cloud Messaging</strong>: entrega de notificaciones push a los dispositivos.</li>
+    </ul>
+    <p>
+      Estos proveedores actúan como encargados del tratamiento y no usan los datos para
+      fines propios. Los datos pueden almacenarse en servidores fuera de Colombia; al
+      usar la Aplicación usted consiente esta transferencia internacional, realizada con
+      proveedores que mantienen medidas de seguridad estándar de la industria.
+    </p>
+
+    <h3>3.3 Nadie más</h3>
+    <p>
+      No vendemos, alquilamos ni cedemos datos personales a terceros con fines
+      comerciales. Solo revelaríamos información si una autoridad competente lo exigiera
+      conforme a la ley.
+    </p>
+  </div>
+
+  <hr>
+
+  <div class="section">
+    <h2>4. Conservación y eliminación</h2>
+    <ul>
+      <li>Los datos se conservan mientras la cuenta esté activa.</li>
+      <li>Usted puede eliminar su cuenta en cualquier momento desde la propia Aplicación (Ajustes → Eliminar Cuenta). Esto elimina su cuenta y los datos asociados de nuestros sistemas.</li>
+      <li>Los pacientes y sus datos pueden ser eliminados por el responsable principal del paciente. Al eliminar un paciente se eliminan sus medicamentos e historial.</li>
+      <li>Algunos registros técnicos mínimos pueden conservarse temporalmente por seguridad y luego se eliminan de forma rutinaria.</li>
     </ul>
   </div>
 
   <hr>
 
   <div class="section">
-    <h2>7. Eliminación de cuenta y datos</h2>
-    <p>El usuario puede eliminar su cuenta y todos sus datos de dos formas:</p>
-
-    <div class="delete-block">
-      <h3>Opción 1 — Desde la aplicación</h3>
-      <p>
-        Ajustes → Eliminar Cuenta. Se solicitará la contraseña para confirmar. 
-        La eliminación es inmediata y permanente: se borran la cuenta, los pacientes 
-        creados, sus medicamentos y el historial completo.
-      </p>
-    </div>
-
-    <div class="delete-block">
-      <h3>Opción 2 — Por correo electrónico</h3>
-      <p>
-        Si no es posible acceder a la app, escribir a 
-        <strong>support.medcontrol@gmail.com</strong> con el asunto 
-        "Eliminar cuenta MedControl" indicando el email de la cuenta. 
-        La solicitud será procesada en un plazo máximo de 30 días hábiles.
-      </p>
-    </div>
-
-    <p style="margin-top:16px; font-size:14px; color:#666;">
-      Los datos eliminados no pueden recuperarse. Los registros de emails 
-      enviados a través de SendGrid pueden permanecer en los servidores de 
-      ese servicio según su propia política de retención.
-    </p>
-  </div>
-
-  <hr>
-
-  <div class="section">
-    <h2>8. Menores de edad</h2>
+    <h2>5. Seguridad</h2>
     <p>
-      MedControl está diseñada para ser utilizada por cuidadores adultos. 
-      La aplicación permite registrar pacientes de cualquier edad como parte 
-      de su función de gestión familiar de medicamentos. No se recopilan 
-      datos directamente de menores; es el cuidador adulto quien ingresa 
-      y gestiona esa información.
+      Aplicamos medidas razonables de protección: cifrado de las comunicaciones
+      (HTTPS/TLS), contraseñas con hash criptográfico, verificación de correo, controles
+      de autorización por usuario (cada cuidador solo accede a los pacientes que le
+      corresponden) y límites contra intentos de acceso abusivos. Ningún sistema es
+      infalible, pero trabajamos para proteger su información con estándares de la
+      industria.
     </p>
   </div>
 
   <hr>
 
   <div class="section">
-    <h2>9. Cambios a esta política</h2>
+    <h2>6. Sus derechos (Ley 1581 de 2012 — Colombia)</h2>
     <p>
-      Esta política puede actualizarse ocasionalmente. Los cambios se reflejarán 
-      en la fecha de la parte superior de esta página. El uso continuado de la 
-      aplicación tras la publicación de cambios implica la aceptación de la 
-      política actualizada.
+      Como titular de los datos, usted tiene derecho a conocer, actualizar, rectificar
+      y suprimir sus datos personales, así como a revocar la autorización otorgada.
+      Puede ejercerlos:
+    </p>
+    <ul>
+      <li>Directamente en la Aplicación (editar su perfil, editar/eliminar pacientes, eliminar su cuenta).</li>
+      <li>Escribiendo a <a href="mailto:support.medcontrol@gmail.com">support.medcontrol@gmail.com</a>.</li>
+    </ul>
+    <p>
+      Si usted es un paciente cuyos datos fueron ingresados por un cuidador y desea su
+      supresión, puede solicitarla al cuidador responsable o contactarnos directamente
+      acreditando su identidad.
+    </p>
+    <p>
+      Responderemos las solicitudes en los plazos previstos por la normativa colombiana
+      de protección de datos (Ley 1581 de 2012 y decretos reglamentarios).
     </p>
   </div>
 
   <hr>
 
   <div class="section">
-    <h2>10. Contacto</h2>
-    <p>Para preguntas, dudas o solicitudes relacionadas con privacidad:</p>
+    <h2>7. Menores de edad</h2>
+    <p>
+      La Aplicación está dirigida a cuidadores mayores de 18 años. Los pacientes
+      gestionados pueden ser de cualquier edad (incluidos menores o adultos mayores a
+      cargo del cuidador), pero la cuenta y la gestión corresponden siempre a un adulto
+      responsable.
+    </p>
+  </div>
+
+  <hr>
+
+  <div class="section">
+    <h2>8. Cambios a esta política</h2>
+    <p>
+      Podemos actualizar esta Política para reflejar cambios en la Aplicación o en la
+      normativa. Publicaremos la versión vigente en esta misma dirección e indicaremos
+      la fecha de última actualización. Los cambios significativos se comunicarán dentro
+      de la Aplicación.
+    </p>
+  </div>
+
+  <hr>
+
+  <div class="section">
+    <h2>9. Contacto</h2>
+    <p>Preguntas o solicitudes sobre privacidad:</p>
     <div class="contact-block">
       <p>
         Correo: <a href="mailto:support.medcontrol@gmail.com">support.medcontrol@gmail.com</a><br>
-        Responsable: Angel Gabriel Portillo Chaustre<br>
-        Ubicación: San José de Cúcuta, Norte de Santander, Colombia
+        Responsable: Angel Portillo<br>
+        Ubicación: Cúcuta, Colombia
       </p>
     </div>
   </div>
@@ -324,8 +338,8 @@
 </div>
 
 <footer>
-  <p>© 2026 MedControl · Proyecto personal y académico · Angel Gabriel Portillo Chaustre</p>
-  <p style="margin-top: 6px;">Esta política aplica a la aplicación MedControl disponible en Google Play Store.</p>
+  <p>© 2026 MedControl · Proyecto personal y académico · Angel Portillo</p>
+  <p style="margin-top: 6px;">Esta política aplica a la aplicación MedControl disponible en Google Play Store. Consulte también los <a href="terms.html">Términos y Condiciones</a>.</p>
 </footer>
 
 </body>

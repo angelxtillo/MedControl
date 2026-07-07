@@ -103,3 +103,7 @@ android-sdk/-e
 *.env.*
 .claude/
 .claude/
+
+# Borradores legales con notas internas: docs/ es la raiz de GitHub Pages,
+# solo se publican los .html finales
+docs/*.md
