@@ -186,6 +186,7 @@
     "inviteSend": "Send invitation",
     "inviteSent": "Invitation sent",
     "inviteSentDesc": "We sent a code to their email. If they don't see it within a few minutes, ask them to check their spam or junk folder.",
+    "inviteSpamNote": "The email with the code may land in the SPAM folder. Ask your invitee to check it if they don't see it in their inbox.",
     "directMode": "Already has an account? Add directly",
     "inviteMode": "← Back to email invitation",
     "acceptInvitation": "Accept Invitation",

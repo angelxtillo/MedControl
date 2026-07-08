@@ -186,6 +186,7 @@
     "inviteSend": "Enviar invitación",
     "inviteSent": "Invitación enviada",
     "inviteSentDesc": "Te enviamos un correo con el código. Si no lo ves en unos minutos, revisa tu carpeta de spam o correo no deseado.",
+    "inviteSpamNote": "El correo con el código puede llegar a la carpeta de SPAM. Pídele a tu invitado que la revise si no lo ve en su bandeja de entrada.",
     "directMode": "¿Ya tiene cuenta? Agrégalo directamente",
     "inviteMode": "← Volver a invitación por email",
     "acceptInvitation": "Aceptar Invitación",

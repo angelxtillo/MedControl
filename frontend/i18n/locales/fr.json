@@ -186,6 +186,7 @@
     "inviteSend": "Envoyer l'invitation",
     "inviteSent": "Invitation envoyée",
     "inviteSentDesc": "Nous avons envoyé un code à l'adresse e-mail indiquée. Si vous ne le voyez pas dans quelques minutes, vérifiez le dossier spam ou courrier indésirable.",
+    "inviteSpamNote": "L'e-mail contenant le code peut arriver dans le dossier SPAM. Demandez à votre invité de le vérifier s'il ne le voit pas dans sa boîte de réception.",
     "directMode": "Déjà un compte ? Ajoutez-le directement",
     "inviteMode": "← Retour à l'invitation par e-mail",
     "acceptInvitation": "Accepter l'invitation",

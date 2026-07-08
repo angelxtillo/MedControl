@@ -226,10 +226,19 @@ export default function CaregiversManager({
                   autoCorrect={false}
                 />
               </View>
-              <View style={styles.infoBox}>
-                <Ionicons name="mail" size={20} color="#2196F3" />
-                <Text style={styles.infoText}>
-                  {t('caregivers.inviteDescription')}
+              <View style={styles.spamBox}>
+                <Ionicons name="warning" size={20} color="#F57C00" />
+                <Text style={styles.spamText}>
+                  {(() => {
+                    const parts = t('caregivers.inviteSpamNote').split('SPAM');
+                    return (
+                      <>
+                        {parts[0]}
+                        <Text style={styles.spamWord}>SPAM</Text>
+                        {parts[1]}
+                      </>
+                    );
+                  })()}
                 </Text>
               </View>
             </ScrollView>
@@ -411,6 +420,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#1565C0',
     lineHeight: 20,
+  },
+  spamBox: {
+    flexDirection: 'row',
+    backgroundColor: '#FFF3E0',
+    padding: 12,
+    borderRadius: 8,
+    gap: 10,
+  },
+  spamText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#E65100',
+    lineHeight: 20,
+  },
+  spamWord: {
+    fontWeight: 'bold',
   },
   modalFooter: {
     flexDirection: 'row',

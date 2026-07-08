@@ -186,6 +186,7 @@
     "inviteSend": "Enviar convite",
     "inviteSent": "Convite enviado",
     "inviteSentDesc": "Enviamos um código para o e-mail informado. Se não chegar em alguns minutos, verifique a pasta de spam ou lixo eletrônico.",
+    "inviteSpamNote": "O e-mail com o código pode ir para a pasta de SPAM. Peça ao seu convidado que a verifique se não o encontrar na caixa de entrada.",
     "directMode": "Já tem conta? Adicione diretamente",
     "inviteMode": "← Voltar ao convite por e-mail",
     "acceptInvitation": "Aceitar Convite",
