@@ -267,7 +267,7 @@ async def lifespan(app: FastAPI):
 
 # Create the main app
 app = FastAPI(
-    title="MedControl API",
+    title="Dosaria API",
     description="API para gestión de medicamentos y pacientes",
     version="1.0.0",
     lifespan=lifespan
@@ -564,17 +564,17 @@ async def send_invitation_email(
         html_content = f"""
         <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px;">
           <div style="background: #2196F3; padding: 20px; border-radius: 12px 12px 0 0; text-align: center;">
-            <h1 style="color: white; margin: 0;">&#128138; MedControl</h1>
+            <h1 style="color: white; margin: 0;">&#128138; Dosaria</h1>
           </div>
           <div style="background: #f9f9f9; padding: 24px; border-radius: 0 0 12px 12px;">
             <h2 style="color: #212121;">Te han invitado como cuidador</h2>
             <p style="color: #666;">
               <strong>{inviter_name}</strong> te ha invitado a ser
-              cuidador de <strong>{patient_name}</strong> en MedControl.
+              cuidador de <strong>{patient_name}</strong> en Dosaria.
             </p>
             <p style="color: #666;">Para aceptar la invitación:</p>
             <ol style="color: #666;">
-              <li>Descarga MedControl desde Play Store</li>
+              <li>Descarga Dosaria desde Play Store</li>
               <li>Crea tu cuenta o inicia sesión</li>
               <li>Ve a Ajustes &rarr; Aceptar invitación</li>
               <li>Ingresa este código:</li>
@@ -591,7 +591,7 @@ async def send_invitation_email(
         message = Mail(
             from_email=SENDGRID_FROM_EMAIL,
             to_emails=to_email,
-            subject=f"MedControl: {inviter_name} te invita a cuidar a {patient_name}",
+            subject=f"Dosaria: {inviter_name} te invita a cuidar a {patient_name}",
             html_content=html_content
         )
         response = sg.send(message)
@@ -611,12 +611,12 @@ async def send_verification_email(to_email: str, code: str) -> bool:
         html_content = f"""
         <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px;">
           <div style="background: #2196F3; padding: 20px; border-radius: 12px 12px 0 0; text-align: center;">
-            <h1 style="color: white; margin: 0;">&#128138; MedControl</h1>
+            <h1 style="color: white; margin: 0;">&#128138; Dosaria</h1>
           </div>
           <div style="background: #f9f9f9; padding: 24px; border-radius: 0 0 12px 12px;">
             <h2 style="color: #212121;">Verifica tu correo electrónico</h2>
             <p style="color: #666;">
-              Gracias por registrarte en MedControl. Para completar tu registro,
+              Gracias por registrarte en Dosaria. Para completar tu registro,
               ingresa el siguiente código en la aplicación:
             </p>
             <div style="background: #E3F2FD; border: 2px dashed #2196F3; border-radius: 12px; padding: 20px; text-align: center; margin: 20px 0;">
@@ -631,7 +631,7 @@ async def send_verification_email(to_email: str, code: str) -> bool:
         message = Mail(
             from_email=SENDGRID_FROM_EMAIL,
             to_emails=to_email,
-            subject="MedControl: Verifica tu correo electrónico",
+            subject="Dosaria: Verifica tu correo electrónico",
             html_content=html_content
         )
         response = sg.send(message)
@@ -1336,7 +1336,7 @@ async def _notify_dose(
     patient_name = patient.get("name", "")
     med_name = med.get("name", "tu medicamento")
     if kind == "main":
-        title = "MedControl"
+        title = "Dosaria"
         body = f"Es hora de {med_name} — Paciente: {patient_name}"
     else:
         title = "⏰ Recordatorio pendiente"
@@ -1483,7 +1483,7 @@ async def test_push(user_id: str = Depends(get_current_user)):
         raise HTTPException(status_code=400, detail="No hay dispositivos registrados para este usuario")
     result = await send_push_to_tokens(
         tokens,
-        "MedControl",
+        "Dosaria",
         "Notificación de prueba ✅",
         data={"type": "test"},
     )
