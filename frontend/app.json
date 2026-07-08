@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "medcontrol",
+    "scheme": "dosaria",
     "userInterfaceStyle": "automatic",
     "platforms": [
       "ios",
@@ -22,7 +22,7 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.angelportillo.medcontrol",
+      "bundleIdentifier": "com.angelportillo.dosaria",
       "buildNumber": "1.0.0",
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Agregar fotos de pacientes",
@@ -31,7 +31,7 @@
       }
     },
     "android": {
-      "package": "com.angelportillo.medcontrol",
+      "package": "com.angelportillo.dosaria",
       "googleServicesFile": "./google-services.json",
       "versionCode": 1,
       "adaptiveIcon": {
