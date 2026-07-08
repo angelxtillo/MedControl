@@ -32,6 +32,7 @@
     "email": "Email",
     "password": "Password",
     "fullName": "Full name",
+    "tagline": "Care for every dose",
     "loginSubtitle": "Log in to continue",
     "registerSubtitle": "Create your account",
     "noAccount": "Don't have an account?",
@@ -64,7 +65,7 @@
     "mustAccept": "You must accept the Terms and Conditions and the Privacy Policy to continue.",
     "acceptError": "We couldn't record your acceptance. Please try again.",
     "gateTitle": "We updated our terms",
-    "gateBody": "To keep using MedControl, please review and accept the Terms and Conditions and the Privacy Policy.",
+    "gateBody": "To keep using Dosaria, please review and accept the Terms and Conditions and the Privacy Policy.",
     "gateAccept": "Accept and continue"
   },
   "onboarding": {
@@ -351,7 +352,7 @@
   "settings": {
     "title": "Settings",
     "application": "Application",
-    "aboutApp": "About MedControl",
+    "aboutApp": "About Dosaria",
     "aboutAppDesc": "Information, purpose and privacy",
     "supportProject": "Support the Project",
     "supportProjectDesc": "Contribute voluntarily to development",
@@ -386,15 +387,15 @@
     "deleteAccountDesc": "Delete your account and all your data"
   },
   "about": {
-    "title": "About MedControl",
+    "title": "About Dosaria",
     "purpose": "Our Purpose",
-    "purposeText1": "MedControl was born with a clear mission: to help caregivers and families manage their loved ones' medications in a simple, organized, and reliable way.",
+    "purposeText1": "Dosaria was born with a clear mission: to help caregivers and families manage their loved ones' medications in a simple, organized, and reliable way.",
     "purposeText2": "We know how important it is not to miss a dose, and that's why we created this tool to make care easier and safer.",
     "developer": "Developer",
     "developerText1": "This application is an independent project, developed with dedication and commitment to offer a useful and accessible tool for everyone.",
     "developerText2": "💙 Created with love for those who care for others.",
     "freeApp": "100% Free",
-    "freeAppText1": "MedControl is and will always be free. No intrusive ads, no locked features, no hidden subscriptions.",
+    "freeAppText1": "Dosaria is and will always be free. No intrusive ads, no locked features, no hidden subscriptions.",
     "freeAppText2": "If you wish to support the continued development of this app, you can do so voluntarily from the \"Support the Project\" section.",
     "importantNotice": "Important Notice",
     "disclaimer1": "⚠️ This application is an organization and reminder tool. It does NOT replace professional medical advice, diagnosis, or treatment.",
@@ -405,7 +406,7 @@
   "donate": {
     "title": "Support the Project",
     "thanks": "Thank you for considering supporting us!",
-    "subtitle": "Your voluntary support helps keep MedControl free and constantly improving.",
+    "subtitle": "Your voluntary support helps keep Dosaria free and constantly improving.",
     "helpsWith": "Your support helps:",
     "noAds": "Keep the app ad-free",
     "newFeatures": "Develop new features",

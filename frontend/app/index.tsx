@@ -250,7 +250,7 @@ export default function Index() {
       <SafeAreaView style={styles.loadingContainer}>
         <View style={styles.loadingContent}>
           <LoadingLogo />
-          <Text style={styles.loadingTitle}>MedControl</Text>
+          <Text style={styles.loadingTitle}>Dosaria</Text>
         </View>
       </SafeAreaView>
     );
@@ -359,7 +359,8 @@ export default function Index() {
             <View style={styles.iconCircle}>
               <Ionicons name="medical" size={48} color="#2196F3" />
             </View>
-            <Text style={styles.title}>MedControl</Text>
+            <Text style={styles.title}>Dosaria</Text>
+            <Text style={styles.tagline}>{t('auth.tagline')}</Text>
             <Text style={styles.subtitle}>
               {isLogin ? t('auth.loginSubtitle') : t('auth.registerSubtitle')}
             </Text>
@@ -482,6 +483,12 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontWeight: 'bold',
     color: '#212121',
+    marginBottom: 4,
+  },
+  tagline: {
+    fontSize: 15,
+    color: '#2196F3',
+    fontWeight: '600',
     marginBottom: 8,
   },
   subtitle: {

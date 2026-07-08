@@ -11,7 +11,6 @@ import {
   Switch,
   TextInput,
   ActivityIndicator,
-  Image,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
@@ -38,7 +37,6 @@ export default function SettingsScreen() {
   const [invitationModalVisible, setInvitationModalVisible] = useState(false);
   const [inviteCode, setInviteCode] = useState('');
   const [acceptingInvite, setAcceptingInvite] = useState(false);
-  const [nequiModalVisible, setNequiModalVisible] = useState(false);
 
   const handleLogout = () => {
     Alert.alert(
@@ -120,11 +118,8 @@ export default function SettingsScreen() {
         url = 'https://www.paypal.com/ncp/payment/RVPPJA6DAQDZN';
         break;
       case 'kofi':
-        url = 'https://ko-fi.com/medcontrol';
+        url = 'https://ko-fi.com/dosaria';
         break;
-      case 'nequi':
-        setNequiModalVisible(true);
-        return;
     }
     
     try {
@@ -238,7 +233,7 @@ export default function SettingsScreen() {
             icon="mail"
             title={t('settings.contactSupport')}
             subtitle={t('settings.contactSupportDesc')}
-            onPress={() => Linking.openURL('mailto:support.medcontrol@gmail.com?subject=Soporte%20MedControl')}
+            onPress={() => Linking.openURL('mailto:support.dosaria@gmail.com?subject=Soporte%20Dosaria')}
           />
 
           <MenuItem
@@ -295,7 +290,7 @@ export default function SettingsScreen() {
         </View>
 
         {/* Versión */}
-        <Text style={styles.versionText}>MedControl v1.0.0</Text>
+        <Text style={styles.versionText}>Dosaria v1.0.0</Text>
       </ScrollView>
 
       {/* Modal Sobre la App */}
@@ -323,7 +318,7 @@ export default function SettingsScreen() {
                 <View style={styles.aboutLogo}>
                   <Ionicons name="medical" size={48} color="#2196F3" />
                 </View>
-                <Text style={styles.aboutAppName}>MedControl</Text>
+                <Text style={styles.aboutAppName}>Dosaria</Text>
                 <Text style={styles.aboutVersion}>Versión 1.0.0</Text>
               </View>
 
@@ -481,15 +476,6 @@ export default function SettingsScreen() {
                 <Ionicons name="open-outline" size={18} color="white" />
               </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[styles.donateOption, { backgroundColor: '#E31C5F' }]}
-                onPress={() => openDonationLink('nequi')}
-              >
-                <Ionicons name="phone-portrait" size={24} color="white" />
-                <Text style={styles.donateOptionText}>Nequi</Text>
-                <Ionicons name="information-circle-outline" size={18} color="white" />
-              </TouchableOpacity>
-
               {/* Mensaje de gratitud */}
               <View style={styles.gratitudeSection}>
                 <Text style={styles.gratitudeText}>{t('donate.gratitude1')}</Text>
@@ -544,53 +530,6 @@ export default function SettingsScreen() {
                 </TouchableOpacity>
               ))}
             </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Modal QR Nequi */}
-      <Modal
-        visible={nequiModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setNequiModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.nequiModalContent, { paddingBottom: insets.bottom + 16 }]}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{t('donate.donateNequiTitle')}</Text>
-              <TouchableOpacity
-                onPress={() => setNequiModalVisible(false)}
-                style={styles.closeButton}
-              >
-                <Ionicons name="close" size={24} color="#666" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
-              <Text style={styles.nequiScanText}>{t('donate.scanQR')}</Text>
-
-              <Image
-                source={require('../../assets/images/nequi-qr.jpg')}
-                style={styles.nequiQRImage}
-                resizeMode="contain"
-              />
-
-              <Text style={styles.nequiNote}>{t('donate.nequiNote')}</Text>
-
-              <View style={styles.nequiInfoBox}>
-                <Text style={styles.nequiInfoText}>{t('donate.donateNequiMsg')}</Text>
-              </View>
-
-              <TouchableOpacity
-                style={styles.nequiCloseButton}
-                onPress={() => setNequiModalVisible(false)}
-              >
-                <Text style={styles.nequiCloseButtonText}>{t('common.close')}</Text>
-              </TouchableOpacity>
-
-              <View style={styles.modalFooterSpace} />
-            </ScrollView>
           </View>
         </View>
       </Modal>

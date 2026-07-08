@@ -82,7 +82,7 @@ export default function PermissionsScreen() {
 
         <Text style={styles.title}>Permisos Necesarios</Text>
         <Text style={styles.subtitle}>
-          Para funcionar correctamente, MedControl necesita los siguientes permisos:
+          Para funcionar correctamente, Dosaria necesita los siguientes permisos:
         </Text>
 
         <View style={styles.permissionsList}>

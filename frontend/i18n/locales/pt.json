@@ -32,6 +32,7 @@
     "email": "E-mail",
     "password": "Senha",
     "fullName": "Nome completo",
+    "tagline": "Cuide das doses",
     "loginSubtitle": "Entre para continuar",
     "registerSubtitle": "Crie sua conta",
     "noAccount": "Não tem conta?",
@@ -64,7 +65,7 @@
     "mustAccept": "Você deve aceitar os Termos e Condições e a Política de Privacidade para continuar.",
     "acceptError": "Não foi possível registrar sua aceitação. Tente novamente.",
     "gateTitle": "Atualizamos nossos termos",
-    "gateBody": "Para continuar usando o MedControl, revise e aceite os Termos e Condições e a Política de Privacidade.",
+    "gateBody": "Para continuar usando o Dosaria, revise e aceite os Termos e Condições e a Política de Privacidade.",
     "gateAccept": "Aceitar e continuar"
   },
   "onboarding": {
@@ -351,7 +352,7 @@
   "settings": {
     "title": "Configurações",
     "application": "Aplicativo",
-    "aboutApp": "Sobre o MedControl",
+    "aboutApp": "Sobre o Dosaria",
     "aboutAppDesc": "Informações, propósito e privacidade",
     "supportProject": "Apoiar o Projeto",
     "supportProjectDesc": "Contribua voluntariamente para o desenvolvimento",
@@ -386,15 +387,15 @@
     "deleteAccountDesc": "Apague sua conta e todos os seus dados"
   },
   "about": {
-    "title": "Sobre o MedControl",
+    "title": "Sobre o Dosaria",
     "purpose": "Nosso Propósito",
-    "purposeText1": "MedControl nasceu com uma missão clara: ajudar cuidadores e famílias a gerenciar os medicamentos de seus entes queridos de forma simples, organizada e confiável.",
+    "purposeText1": "Dosaria nasceu com uma missão clara: ajudar cuidadores e famílias a gerenciar os medicamentos de seus entes queridos de forma simples, organizada e confiável.",
     "purposeText2": "Sabemos como é importante não esquecer uma dose, e por isso criamos esta ferramenta para tornar o cuidado mais fácil e seguro.",
     "developer": "Desenvolvedor",
     "developerText1": "Esta aplicação é um projeto independente, desenvolvido com dedicação e compromisso de oferecer uma ferramenta útil e acessível para todos.",
     "developerText2": "💙 Criado com amor para quem cuida dos outros.",
     "freeApp": "100% Gratuito",
-    "freeAppText1": "MedControl é e sempre será gratuito. Sem anúncios intrusivos, sem funções bloqueadas, sem assinaturas ocultas.",
+    "freeAppText1": "Dosaria é e sempre será gratuito. Sem anúncios intrusivos, sem funções bloqueadas, sem assinaturas ocultas.",
     "freeAppText2": "Se você deseja apoiar o desenvolvimento contínuo deste app, pode fazê-lo voluntariamente na seção \"Apoiar o Projeto\".",
     "importantNotice": "Aviso Importante",
     "disclaimer1": "⚠️ Este aplicativo é uma ferramenta de organização e lembretes. NÃO substitui o conselho, diagnóstico ou tratamento médico profissional.",
@@ -405,7 +406,7 @@
   "donate": {
     "title": "Apoiar o Projeto",
     "thanks": "Obrigado por considerar nos apoiar!",
-    "subtitle": "Seu apoio voluntário ajuda a manter o MedControl gratuito e em constante melhoria.",
+    "subtitle": "Seu apoio voluntário ajuda a manter o Dosaria gratuito e em constante melhoria.",
     "helpsWith": "Com seu apoio você ajuda a:",
     "noAds": "Manter o app sem anúncios",
     "newFeatures": "Desenvolver novos recursos",
