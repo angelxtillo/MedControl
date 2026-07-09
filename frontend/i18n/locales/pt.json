@@ -2,6 +2,7 @@
   "common": {
     "loading": "Carregando...",
     "error": "Erro",
+    "errorGeneric": "Algo deu errado. Tente novamente.",
     "success": "Sucesso",
     "cancel": "Cancelar",
     "save": "Salvar",
@@ -45,6 +46,10 @@
     "invalidEmail": "Insira um e-mail válido",
     "invalidCode": "Insira o código de 6 caracteres",
     "passwordHint": "Mínimo de 8 caracteres, incluindo letra e número",
+    "passwordTooShort": "A senha deve ter pelo menos {{min}} caracteres",
+    "passwordTooLong": "A senha não pode exceder {{max}} caracteres",
+    "passwordNeedsLetter": "A senha deve conter pelo menos uma letra",
+    "passwordNeedsNumber": "A senha deve conter pelo menos um número",
     "verifyEmailTitle": "Verifique seu e-mail",
     "verifyEmailSubtitle": "Insira o código que enviamos",
     "verifyEmailInfo": "Enviamos um código de 6 dígitos para {{email}}. Se não encontrar, verifique sua pasta de spam.",

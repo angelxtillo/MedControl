@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import Constants from 'expo-constants';
 import { setUnauthorizedHandler } from '../utils/api';
+import { getApiErrorMessage } from '../utils/errors';
 import {
   cancelAllScheduledNotifications,
   registerPushToken,
@@ -127,7 +128,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Registrar el push token de este dispositivo para la cuenta que entró.
       registerPushToken().catch(() => {});
     } catch (error: any) {
-      throw new Error(error.response?.data?.detail || 'Error al iniciar sesión');
+      throw new Error(getApiErrorMessage(error, 'Error al iniciar sesión'));
     }
   };
 
@@ -158,7 +159,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       registerPushToken().catch(() => {});
       return { requiresVerification: false };
     } catch (error: any) {
-      throw new Error(error.response?.data?.detail || 'Error al registrarse');
+      throw new Error(getApiErrorMessage(error, 'Error al registrarse'));
     }
   };
 
@@ -176,7 +177,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Verificación exitosa = sesión nueva: registrar el push token.
       registerPushToken().catch(() => {});
     } catch (error: any) {
-      throw new Error(error.response?.data?.detail || 'Código inválido');
+      throw new Error(getApiErrorMessage(error, 'Código inválido'));
     }
   };
 
@@ -187,7 +188,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }, { timeout: 60000 });
       return response.data?.code_expires_in_seconds;
     } catch (error: any) {
-      throw new Error(error.response?.data?.detail || 'No se pudo reenviar el código');
+      throw new Error(getApiErrorMessage(error, 'No se pudo reenviar el código'));
     }
   };
 
@@ -249,7 +250,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setToken(null);
       setUser(null);
     } catch (error: any) {
-      throw new Error(error.response?.data?.detail || 'Error al eliminar la cuenta');
+      throw new Error(getApiErrorMessage(error, 'Error al eliminar la cuenta'));
     }
   };
 

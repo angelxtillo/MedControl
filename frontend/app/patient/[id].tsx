@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
 import { useRefreshOnResume } from '../../hooks/useRefreshOnResume';
 import api from '../../utils/api';
+import { getApiErrorMessage } from '../../utils/errors';
 import CaregiversManager from '../../components/CaregiversManager';
 import { useTranslation } from 'react-i18next';
 import {
@@ -165,7 +166,7 @@ export default function PatientDetail() {
               Alert.alert(t('common.success'), t('patients.leftPatient'));
               router.back();
             } catch (error: any) {
-              const message = error?.response?.data?.detail || t('patients.errorLeave');
+              const message = getApiErrorMessage(error, t('patients.errorLeave'));
               Alert.alert(t('common.error'), message);
             }
           },

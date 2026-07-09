@@ -19,6 +19,7 @@ import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
 import { TermsCheckbox } from '../components/TermsCheckbox';
+import { getApiErrorMessage } from '../utils/errors';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -30,6 +31,21 @@ import Animated, {
 
 const ONBOARDING_KEY = '@medcontrol_onboarding_complete';
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Espejo de validate_password() del backend (server.py). El backend sigue siendo
+// la autoridad; validar aquí evita el viaje de ida y vuelta y, sobre todo, permite
+// decir en el idioma del usuario QUÉ requisito falló: los mensajes del backend
+// solo existen en español.
+const PASSWORD_MIN_LENGTH = 8;
+const PASSWORD_MAX_LENGTH = 72;
+
+const passwordErrorKey = (pwd: string): string | null => {
+  if (pwd.length < PASSWORD_MIN_LENGTH) return 'auth.passwordTooShort';
+  if (pwd.length > PASSWORD_MAX_LENGTH) return 'auth.passwordTooLong';
+  if (!/[a-zA-Z]/.test(pwd)) return 'auth.passwordNeedsLetter';
+  if (!/[0-9]/.test(pwd)) return 'auth.passwordNeedsNumber';
+  return null;
+};
 
 // El botón "Reenviar" se rehabilita 60s después de cada envío.
 const RESEND_COOLDOWN_MS = 60 * 1000;
@@ -179,6 +195,19 @@ export default function Index() {
       return;
     }
 
+    // Solo al registrarse: una cuenta antigua puede tener una contraseña que ya
+    // no cumple la política, y debe poder iniciar sesión igualmente.
+    if (!isLogin) {
+      const pwdErrorKey = passwordErrorKey(password);
+      if (pwdErrorKey) {
+        Alert.alert(t('common.error'), t(pwdErrorKey, {
+          min: PASSWORD_MIN_LENGTH,
+          max: PASSWORD_MAX_LENGTH,
+        }));
+        return;
+      }
+    }
+
     if (!isLogin && !acceptedTerms) {
       Alert.alert(t('common.error'), t('legal.mustAccept'));
       return;
@@ -205,7 +234,7 @@ export default function Index() {
         setShowVerification(true);
         armResendCooldownOnly();
       } else {
-        Alert.alert(t('common.error'), error.message);
+        Alert.alert(t('common.error'), getApiErrorMessage(error, t('common.errorGeneric')));
       }
     } finally {
       setLoading(false);
@@ -223,7 +252,7 @@ export default function Index() {
       await verifyEmail(verificationEmail, verificationCode);
       router.replace('/(tabs)/home');
     } catch (error: any) {
-      Alert.alert(t('common.error'), error.message);
+      Alert.alert(t('common.error'), getApiErrorMessage(error, t('common.errorGeneric')));
     } finally {
       setLoading(false);
     }
@@ -238,7 +267,7 @@ export default function Index() {
       Alert.alert(t('common.success'), t('auth.codeSent'));
       onCodeIssued(expiresInSeconds);
     } catch (error: any) {
-      Alert.alert(t('common.error'), error.message);
+      Alert.alert(t('common.error'), getApiErrorMessage(error, t('common.errorGeneric')));
     } finally {
       setLoading(false);
     }

@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../utils/api';
+import { getApiErrorMessage } from '../utils/errors';
 import { useTranslation } from 'react-i18next';
 
 interface Caregiver {
@@ -81,7 +82,7 @@ export default function CaregiversManager({
       if (error?.response?.status === 403) {
         Alert.alert(t('common.error'), t('caregivers.onlyOwnerCanManage'));
       } else {
-        const message = error.response?.data?.detail || t('caregivers.inviteError');
+        const message = getApiErrorMessage(error, t('caregivers.inviteError'));
         Alert.alert(t('common.error'), message);
       }
     } finally {
@@ -113,7 +114,7 @@ export default function CaregiversManager({
               if (error?.response?.status === 403) {
                 Alert.alert(t('common.error'), t('caregivers.onlyOwnerCanManage'));
               } else {
-                const message = error.response?.data?.detail || t('common.errorDelete');
+                const message = getApiErrorMessage(error, t('common.errorDelete'));
                 Alert.alert(t('common.error'), message);
               }
             }
