@@ -1,4 +1,7 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -272,6 +275,31 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """422 sin eco del valor rechazado.
+
+    El handler por defecto de FastAPI serializa exc.errors() entero, que incluye
+    `input` (el valor que fallo la validacion) y `ctx`. En /auth/register eso
+    significa devolver la contrasena en claro en el cuerpo de la respuesta, de
+    donde puede acabar en logs de acceso, proxies o monitorizacion.
+
+    Se conservan solo `loc` y `msg`: lo que el cliente necesita para decirle al
+    usuario que campo fallo y por que. La forma sigue siendo una lista, que es
+    lo que getApiErrorMessage() del frontend ya espera.
+    """
+    safe_detail = [
+        {"loc": err.get("loc", []), "msg": err.get("msg", "")}
+        for err in exc.errors()
+    ]
+    return JSONResponse(
+        status_code=422,
+        content=jsonable_encoder({"detail": safe_detail}),
+    )
+
+
 api_router = APIRouter(prefix="/api")
 
 # ============= PASSWORD VALIDATION =============
