@@ -54,7 +54,7 @@ import time
 from collections import defaultdict
 import sendgrid
 from sendgrid.helpers.mail import Mail
-import random
+import secrets
 import string
 import httpx
 
@@ -551,7 +551,7 @@ def med_baseline_local(med: dict, timezone_offset: int):
 # ============= INVITATION HELPERS =============
 def generate_invitation_code() -> str:
     chars = string.ascii_uppercase + string.digits
-    return ''.join(random.choices(chars, k=6))
+    return ''.join(secrets.choice(chars) for _ in range(6))
 
 async def send_invitation_email(
     to_email: str,
@@ -2197,13 +2197,21 @@ async def accept_invitation(
     """Accept a caregiver invitation using a 6-digit code"""
     code = data.code.strip().upper()
 
+    # Un código que no existe y un código dirigido a otro email devuelven la misma
+    # respuesta: distinguirlos confirmaría a un atacante que el código existe.
+    invalid_code = HTTPException(
+        status_code=404,
+        detail="Código inválido o no disponible. Verifica el código y que hayas iniciado "
+               "sesión con el email al que se envió la invitación."
+    )
+
     invitation = await db.invitations.find_one({
         "code": code,
         "status": "pending"
     })
 
     if not invitation:
-        raise HTTPException(status_code=404, detail="Código inválido. Verifica el código e inténtalo de nuevo.")
+        raise invalid_code
 
     if invitation["expires_at"] < utc_now_naive():
         await db.invitations.update_one(
@@ -2218,7 +2226,7 @@ async def accept_invitation(
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
     if current_user["email"].lower() != invitation["invitee_email"].lower():
-        raise HTTPException(status_code=403, detail="Este código fue enviado a otro email. Inicia sesión con el email correcto.")
+        raise invalid_code
 
     patient_id = invitation["patient_id"]
     patient = await db.patients.find_one({"_id": ObjectId(patient_id)})
