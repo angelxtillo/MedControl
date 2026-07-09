@@ -196,10 +196,9 @@
     "codeLabel": "Código de convite",
     "codePlaceholder": "ABC123",
     "codeExpired": "Código expirado",
-    "codeInvalid": "Código inválido",
+    "codeInvalid": "Código inválido ou indisponível. Verifique o código e se você entrou com o e-mail para o qual o convite foi enviado.",
     "nowCaregiver": "Agora você é cuidador de {{name}}!",
     "inviteSubtitle": "Insira um código para entrar como cuidador",
-    "codeWrongEmail": "Este código foi enviado para outro e-mail. Entre com o e-mail correto.",
     "errorAccept": "Não foi possível aceitar o convite"
   },
   "medications": {

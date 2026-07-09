@@ -67,7 +67,6 @@ export function AcceptInvitationModal({ visible, onClose, onAccepted }: AcceptIn
       let msg: string;
       if (status === 404)      msg = t('caregivers.codeInvalid');
       else if (status === 400) msg = t('caregivers.codeExpired');
-      else if (status === 403) msg = t('caregivers.codeWrongEmail');
       else                     msg = t('caregivers.errorAccept');
       Alert.alert(t('common.error'), msg);
     } finally {

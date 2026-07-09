@@ -196,10 +196,9 @@
     "codeLabel": "Código de invitación",
     "codePlaceholder": "ABC123",
     "codeExpired": "Código expirado",
-    "codeInvalid": "Código inválido",
+    "codeInvalid": "Código inválido o no disponible. Verifica el código y que hayas iniciado sesión con el email al que se envió la invitación.",
     "nowCaregiver": "¡Ahora eres cuidador de {{name}}!",
     "inviteSubtitle": "Ingresa un código para unirte como cuidador",
-    "codeWrongEmail": "Este código fue enviado a otro email. Inicia sesión con el correo correcto.",
     "errorAccept": "No se pudo aceptar la invitación"
   },
   "medications": {

@@ -196,10 +196,9 @@
     "codeLabel": "Code d'invitation",
     "codePlaceholder": "ABC123",
     "codeExpired": "Code expiré",
-    "codeInvalid": "Code invalide",
+    "codeInvalid": "Code invalide ou indisponible. Vérifiez le code et assurez-vous d'être connecté avec l'e-mail auquel l'invitation a été envoyée.",
     "nowCaregiver": "Vous êtes maintenant soignant de {{name}} !",
     "inviteSubtitle": "Entrez un code pour rejoindre en tant que soignant",
-    "codeWrongEmail": "Ce code a été envoyé à un autre e-mail. Connectez-vous avec le bon e-mail.",
     "errorAccept": "Impossible d'accepter l'invitation"
   },
   "medications": {

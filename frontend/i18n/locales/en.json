@@ -196,10 +196,9 @@
     "codeLabel": "Invitation code",
     "codePlaceholder": "ABC123",
     "codeExpired": "Code expired",
-    "codeInvalid": "Invalid code",
+    "codeInvalid": "Invalid or unavailable code. Check the code and make sure you signed in with the email the invitation was sent to.",
     "nowCaregiver": "You are now a caregiver for {{name}}!",
     "inviteSubtitle": "Enter a code to join as caregiver",
-    "codeWrongEmail": "This code was sent to a different email. Sign in with the correct email.",
     "errorAccept": "Could not accept invitation"
   },
   "medications": {
