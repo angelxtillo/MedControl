@@ -22,6 +22,7 @@ import api from '../../utils/api';
 import * as ImagePicker from 'expo-image-picker';
 import { useTranslation } from 'react-i18next';
 import { getDeviceTimezone } from '../../utils/timezones';
+import { AcceptInvitationModal } from '../../components/AcceptInvitationModal';
 
 interface Patient {
   id: string;
@@ -42,6 +43,7 @@ export default function Patients() {
   const [notes, setNotes] = useState('');
   const [photo, setPhoto] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [acceptInviteVisible, setAcceptInviteVisible] = useState(false);
 
   const lastRefresh = useRef(0);
 
@@ -167,22 +169,40 @@ export default function Patients() {
             <Ionicons name="people-outline" size={64} color="#ccc" />
             <Text style={styles.emptyText}>{t('patients.noPatients')}</Text>
             <Text style={styles.emptySubtext}>{t('patients.addFirstPatient')}</Text>
+            <TouchableOpacity
+              style={styles.acceptInviteButton}
+              onPress={() => setAcceptInviteVisible(true)}
+            >
+              <Ionicons name="mail-open-outline" size={20} color="#2196F3" />
+              <Text style={styles.acceptInviteButtonText}>{t('caregivers.acceptInvitation')}</Text>
+            </TouchableOpacity>
           </View>
         ) : (
-          patients.map((patient) => (
-            <View key={patient.id} style={styles.patientItem}>
-              <PatientCard
-                {...patient}
-                onPress={() => router.push(`/patient/${patient.id}`)}
-              />
-              <TouchableOpacity
-                style={styles.editButton}
-                onPress={() => handleEditPatient(patient)}
-              >
-                <Ionicons name="pencil" size={20} color="#2196F3" />
-              </TouchableOpacity>
-            </View>
-          ))
+          <>
+            <TouchableOpacity
+              style={styles.inviteLinkRow}
+              onPress={() => setAcceptInviteVisible(true)}
+            >
+              <Ionicons name="mail-open-outline" size={16} color="#2196F3" />
+              <Text style={styles.inviteLinkPrompt}>{t('caregivers.gotInvitePrompt')} </Text>
+              <Text style={styles.inviteLinkAction}>{t('caregivers.acceptCode')}</Text>
+              <Ionicons name="chevron-forward" size={14} color="#2196F3" />
+            </TouchableOpacity>
+            {patients.map((patient) => (
+              <View key={patient.id} style={styles.patientItem}>
+                <PatientCard
+                  {...patient}
+                  onPress={() => router.push(`/patient/${patient.id}`)}
+                />
+                <TouchableOpacity
+                  style={styles.editButton}
+                  onPress={() => handleEditPatient(patient)}
+                >
+                  <Ionicons name="pencil" size={20} color="#2196F3" />
+                </TouchableOpacity>
+              </View>
+            ))}
+          </>
         )}
       </ScrollView>
 
@@ -275,6 +295,12 @@ export default function Patients() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      <AcceptInvitationModal
+        visible={acceptInviteVisible}
+        onClose={() => setAcceptInviteVisible(false)}
+        onAccepted={loadPatients}
+      />
     </SafeAreaView>
   );
 }
@@ -303,6 +329,42 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#ccc',
     marginTop: 8,
+  },
+  acceptInviteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 28,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#2196F3',
+    backgroundColor: '#fff',
+  },
+  acceptInviteButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#2196F3',
+  },
+  inviteLinkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    marginBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e8ebef',
+  },
+  inviteLinkPrompt: {
+    fontSize: 13,
+    color: '#666',
+  },
+  inviteLinkAction: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#2196F3',
   },
   fab: {
     position: 'absolute',

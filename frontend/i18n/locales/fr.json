@@ -190,6 +190,7 @@
     "directMode": "Déjà un compte ? Ajoutez-le directement",
     "inviteMode": "← Retour à l'invitation par e-mail",
     "acceptInvitation": "Accepter l'invitation",
+    "gotInvitePrompt": "Vous avez été invité ?",
     "acceptInvitationDesc": "Entrez le code à 6 chiffres que vous avez reçu par e-mail",
     "acceptCode": "Accepter",
     "codeLabel": "Code d'invitation",

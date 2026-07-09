@@ -20,8 +20,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
 import { changeLanguage, availableLanguages, getCurrentLanguage } from '../../i18n';
-import api from '../../utils/api';
 import { PRIVACY_POLICY_URL, TERMS_URL } from '../../utils/legal';
+import { AcceptInvitationModal } from '../../components/AcceptInvitationModal';
 
 export default function SettingsScreen() {
   const { t } = useTranslation();
@@ -35,8 +35,6 @@ export default function SettingsScreen() {
   const [deletePassword, setDeletePassword] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [invitationModalVisible, setInvitationModalVisible] = useState(false);
-  const [inviteCode, setInviteCode] = useState('');
-  const [acceptingInvite, setAcceptingInvite] = useState(false);
 
   const handleLogout = () => {
     Alert.alert(
@@ -67,34 +65,6 @@ export default function SettingsScreen() {
       setDeleting(false);
       setDeletePassword('');
       setDeleteModalVisible(false);
-    }
-  };
-
-  const handleAcceptInvitation = async () => {
-    if (!inviteCode.trim()) {
-      Alert.alert(t('common.error'), t('caregivers.acceptInvitationDesc'));
-      return;
-    }
-    setAcceptingInvite(true);
-    try {
-      const response = await api.post('/caregivers/accept-invitation', {
-        code: inviteCode.trim().toUpperCase(),
-      });
-      Alert.alert(
-        t('common.success'),
-        t('caregivers.nowCaregiver', { name: response.data.patient_name }),
-        [{ text: t('common.confirm'), onPress: () => { setInvitationModalVisible(false); setInviteCode(''); } }]
-      );
-    } catch (error: any) {
-      const status = error.response?.status;
-      let msg: string;
-      if (status === 404)      msg = t('caregivers.codeInvalid');
-      else if (status === 400) msg = t('caregivers.codeExpired');
-      else if (status === 403) msg = t('caregivers.codeWrongEmail');
-      else                     msg = t('caregivers.errorAccept');
-      Alert.alert(t('common.error'), msg);
-    } finally {
-      setAcceptingInvite(false);
     }
   };
 
@@ -534,70 +504,11 @@ export default function SettingsScreen() {
         </View>
       </Modal>
 
-      {/* Modal Aceptar Invitación */}
-      <Modal
+      {/* Aceptar Invitación (flujo compartido con la pantalla de Pacientes) */}
+      <AcceptInvitationModal
         visible={invitationModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setInvitationModalVisible(false)}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.modalOverlay}
-        >
-          <View style={[styles.modalContent, { paddingBottom: insets.bottom + 16 }]}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{t('caregivers.acceptInvitation')}</Text>
-              <TouchableOpacity
-                onPress={() => { setInvitationModalVisible(false); setInviteCode(''); }}
-                style={styles.closeButton}
-              >
-                <Ionicons name="close" size={24} color="#666" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.modalBody} keyboardShouldPersistTaps="handled">
-              <View style={styles.inviteIconBox}>
-                <Ionicons name="mail-open" size={40} color="#2196F3" />
-              </View>
-              <Text style={styles.inviteDescription}>
-                {t('caregivers.acceptInvitationDesc')}
-              </Text>
-
-              <TextInput
-                style={styles.inviteCodeInput}
-                value={inviteCode}
-                onChangeText={(text) => setInviteCode(text.toUpperCase())}
-                placeholder={t('caregivers.codePlaceholder')}
-                placeholderTextColor="#bbb"
-                maxLength={6}
-                autoCapitalize="characters"
-                keyboardType="default"
-                autoCorrect={false}
-              />
-
-              <TouchableOpacity
-                style={[styles.inviteAcceptButton, acceptingInvite && { opacity: 0.7 }]}
-                onPress={handleAcceptInvitation}
-                disabled={acceptingInvite}
-              >
-                {acceptingInvite ? (
-                  <ActivityIndicator color="white" />
-                ) : (
-                  <Text style={styles.inviteAcceptButtonText}>{t('caregivers.acceptCode')}</Text>
-                )}
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.inviteCancelButton}
-                onPress={() => { setInvitationModalVisible(false); setInviteCode(''); }}
-              >
-                <Text style={styles.inviteCancelButtonText}>{t('common.cancel')}</Text>
-              </TouchableOpacity>
-            </ScrollView>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+        onClose={() => setInvitationModalVisible(false)}
+      />
 
       {/* Modal Eliminar Cuenta */}
       <Modal
@@ -1014,56 +925,6 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: '600',
-  },
-  // Invite acceptance modal styles
-  inviteIconBox: {
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  inviteDescription: {
-    fontSize: 14,
-    color: '#666',
-    lineHeight: 22,
-    textAlign: 'center',
-    marginBottom: 24,
-  },
-  inviteCodeInput: {
-    borderWidth: 2,
-    borderColor: '#2196F3',
-    borderRadius: 12,
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    fontSize: 28,
-    fontWeight: '700',
-    letterSpacing: 8,
-    textAlign: 'center',
-    color: '#1565C0',
-    backgroundColor: '#E3F2FD',
-    marginBottom: 20,
-  },
-  inviteAcceptButton: {
-    backgroundColor: '#2196F3',
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  inviteAcceptButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: 'white',
-  },
-  inviteCancelButton: {
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#ccc',
-  },
-  inviteCancelButtonText: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#666',
   },
   // Language modal styles
   languageModalContent: {

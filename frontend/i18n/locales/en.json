@@ -190,6 +190,7 @@
     "directMode": "Already has an account? Add directly",
     "inviteMode": "← Back to email invitation",
     "acceptInvitation": "Accept Invitation",
+    "gotInvitePrompt": "Were you invited?",
     "acceptInvitationDesc": "Enter the 6-digit code you received by email",
     "acceptCode": "Accept",
     "codeLabel": "Invitation code",
