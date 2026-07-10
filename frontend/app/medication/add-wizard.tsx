@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import api from '../../utils/api';
+import { formatLongDate, localeForLanguage, startOfToday, toISODate } from '../../utils/dates';
 import { useTranslation } from 'react-i18next';
 
 const TOTAL_STEPS = 5;
@@ -75,7 +76,7 @@ export default function AddMedicationWizard() {
 
   const [dosage, setDosage] = useState('');
 
-  const [startDate, setStartDate] = useState(new Date());
+  const [startDate, setStartDate] = useState(startOfToday);
   const [endDateOption, setEndDateOption] = useState<'indefinite' | 'specific'>('indefinite');
   const [endDate, setEndDate] = useState<Date | null>(null);
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
@@ -212,10 +213,8 @@ export default function AddMedicationWizard() {
         dosage: dosage.trim() || t('medications.noSpecified'),
         frequency: getFrequencyLabel(),
         schedule_times: finalTimes,
-        start_date: `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-${String(startDate.getDate()).padStart(2, '0')}`,
-        end_date: endDateOption === 'specific' && endDate
-          ? `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`
-          : null,
+        start_date: toISODate(startDate),
+        end_date: endDateOption === 'specific' && endDate ? toISODate(endDate) : null,
         instructions: presentation ? `Presentación: ${presentation}` : null,
         notifications_enabled: notificationsEnabled,
         active: true,
@@ -548,10 +547,8 @@ export default function AddMedicationWizard() {
           <Ionicons name="calendar-outline" size={20} color="#2196F3" />
           <Text style={styles.dateButtonText}>
             {startDate.toLocaleDateString(
-              i18n.language === 'es' ? 'es-CO' :
-              i18n.language === 'pt' ? 'pt-BR' :
-              i18n.language === 'fr' ? 'fr-FR' : 'en-US',
-              { weekday: 'long', day: 'numeric', month: 'long' }
+              localeForLanguage(i18n.language),
+              { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }
             )}
           </Text>
         </TouchableOpacity>
@@ -566,6 +563,8 @@ export default function AddMedicationWizard() {
             setShowStartDatePicker(false);
             if (event?.type === 'dismissed' || !date) return;
             setStartDate(date);
+            // Un inicio posterior al fin dejaría un tratamiento que termina antes de empezar.
+            if (endDate && toISODate(endDate) < toISODate(date)) setEndDate(null);
           }}
         />
       )}
@@ -606,29 +605,32 @@ export default function AddMedicationWizard() {
         </TouchableOpacity>
 
         {endDateOption === 'specific' && (
-          <TouchableOpacity
-            style={styles.dateButton}
-            onPress={() => setShowEndDatePicker(true)}
-          >
-            <Ionicons name="calendar-outline" size={20} color="#2196F3" />
-            <Text style={styles.dateButtonText}>
-              {endDate
-                ? endDate.toLocaleDateString(
-                    i18n.language === 'es' ? 'es-CO' :
-                    i18n.language === 'pt' ? 'pt-BR' :
-                    i18n.language === 'fr' ? 'fr-FR' : 'en-US',
-                    { weekday: 'long', day: 'numeric', month: 'long' }
-                  )
-                : t('medications.selectDate')
-              }
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.endDateRow}>
+            <TouchableOpacity
+              style={[styles.dateButton, styles.endDateButton]}
+              onPress={() => setShowEndDatePicker(true)}
+            >
+              <Ionicons name="calendar-outline" size={20} color="#2196F3" />
+              <Text style={[styles.dateButtonText, !endDate && styles.dateButtonPlaceholder]}>
+                {endDate ? formatLongDate(endDate, i18n.language) : t('medications.selectDate')}
+              </Text>
+            </TouchableOpacity>
+            {!!endDate && (
+              <TouchableOpacity
+                onPress={() => setEndDate(null)}
+                accessibilityRole="button"
+                accessibilityLabel={t('medications.clearEndDate')}
+              >
+                <Ionicons name="close-circle" size={28} color="#f44336" />
+              </TouchableOpacity>
+            )}
+          </View>
         )}
       </View>
 
       {showEndDatePicker && (
         <DateTimePicker
-          value={endDate || new Date()}
+          value={endDate ?? startDate}
           mode="date"
           display={Platform.OS === 'ios' ? 'spinner' : 'default'}
           minimumDate={startDate}
@@ -1068,6 +1070,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#212121',
     textTransform: 'capitalize',
+  },
+  dateButtonPlaceholder: {
+    color: '#9e9e9e',
+    textTransform: 'none',
+  },
+  endDateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  endDateButton: {
+    flex: 1,
   },
   endDateOption: {
     flexDirection: 'row',

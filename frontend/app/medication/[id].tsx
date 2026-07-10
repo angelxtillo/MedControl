@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, router } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import api from '../../utils/api';
+import { formatLongDate, parseISODate, startOfToday, toISODate } from '../../utils/dates';
 import { useTranslation } from 'react-i18next';
 
 // Day abbreviations by language — only for display; Spanish keys are stored in MongoDB
@@ -60,11 +61,22 @@ export default function EditMedication() {
   const [customHours, setCustomHours] = useState(3);
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
   const [scheduleTimes, setScheduleTimes] = useState<string[]>(['']);
+  const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [instructions, setInstructions] = useState('');
   const [active, setActive] = useState(true);
   const [showTimePicker, setShowTimePicker] = useState(false);
+  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
   const [editingTimeIndex, setEditingTimeIndex] = useState<number | null>(null);
+
+  // La fecha de fin nunca puede ser anterior al inicio del tratamiento.
+  const minEndDate = parseISODate(startDate) ?? startOfToday();
+  // El picker se rompe en Android si value < minimumDate, así que la fecha guardada se acota.
+  const pickedEndDate = parseISODate(endDate);
+  const endDateValue =
+    pickedEndDate && pickedEndDate >= minEndDate
+      ? pickedEndDate
+      : minEndDate > startOfToday() ? minEndDate : startOfToday();
 
   useEffect(() => {
     loadMedication();
@@ -106,6 +118,7 @@ export default function EditMedication() {
           // stored as the full expanded set, so collapse to one entry (re-expanded on save).
           const loadedTimes = medication.schedule_times || [];
           setScheduleTimes(isSingleTime && loadedTimes.length > 0 ? [loadedTimes[0]] : loadedTimes);
+          setStartDate(medication.start_date || '');
           setEndDate(medication.end_date || '');
           setInstructions(medication.instructions || '');
           setActive(medication.active);
@@ -230,6 +243,11 @@ export default function EditMedication() {
     const validTimes = scheduleTimes.filter(t => t.trim() !== '');
     if (validTimes.length === 0) {
       Alert.alert(t('common.error'), t('medications.addAtLeastOneSchedule'));
+      return;
+    }
+
+    if (endDate && startDate && endDate < startDate) {
+      Alert.alert(t('common.error'), t('medications.endDateBeforeStart'));
       return;
     }
 
@@ -423,12 +441,41 @@ export default function EditMedication() {
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>{t('medications.endDateOptional')}</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="AAAA-MM-DD"
-              value={endDate}
-              onChangeText={setEndDate}
-            />
+            <View style={styles.endDateRow}>
+              <TouchableOpacity
+                style={[styles.input, styles.dateButton]}
+                onPress={() => setShowEndDatePicker(true)}
+              >
+                <Ionicons name="calendar-outline" size={20} color="#2196F3" />
+                <Text style={[styles.dateButtonText, !endDate && styles.dateButtonPlaceholder]}>
+                  {endDate
+                    ? formatLongDate(parseISODate(endDate)!, i18n.language)
+                    : t('medications.noEndDate')}
+                </Text>
+              </TouchableOpacity>
+              {!!endDate && (
+                <TouchableOpacity
+                  onPress={() => setEndDate('')}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('medications.clearEndDate')}
+                >
+                  <Ionicons name="close-circle" size={28} color="#f44336" />
+                </TouchableOpacity>
+              )}
+            </View>
+            {showEndDatePicker && (
+              <DateTimePicker
+                value={endDateValue}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                minimumDate={minEndDate}
+                onChange={(event, date) => {
+                  setShowEndDatePicker(false);
+                  if (event?.type === 'dismissed' || !date) return;
+                  setEndDate(toISODate(date));
+                }}
+              />
+            )}
           </View>
 
           <View style={styles.inputGroup}>
@@ -551,6 +598,24 @@ const styles = StyleSheet.create({
   timeButtonText: {
     fontSize: 16,
     color: '#212121',
+  },
+  endDateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  dateButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  dateButtonText: {
+    fontSize: 16,
+    color: '#212121',
+  },
+  dateButtonPlaceholder: {
+    color: '#9e9e9e',
   },
   switchRow: {
     flexDirection: 'row',
