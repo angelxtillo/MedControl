@@ -15,6 +15,7 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -184,7 +185,7 @@ export default function SettingsScreen() {
             icon="notifications"
             title={t('settings.notifications')}
             subtitle={t('settings.notificationsDesc')}
-            onPress={() => Alert.alert(t('settings.comingSoon'), t('settings.comingSoonDesc'))}
+            onPress={() => router.push('/notifications-settings')}
           />
         </View>
 
@@ -192,13 +193,17 @@ export default function SettingsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('settings.help')}</Text>
           
+          {/* FAQ oculto hasta que exista contenido real: mostrar un placeholder
+              "Próximamente" es peor que no mostrar nada. Se conserva el bloque y
+              las claves i18n (faq/faqDesc) para reactivarlo descomentando.
           <MenuItem
             icon="help-circle"
             title={t('settings.faq')}
             subtitle={t('settings.faqDesc')}
             onPress={() => Alert.alert(t('settings.comingSoon'), t('settings.comingSoonDesc'))}
           />
-          
+          */}
+
           <MenuItem
             icon="mail"
             title={t('settings.contactSupport')}

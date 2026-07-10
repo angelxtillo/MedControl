@@ -116,6 +116,13 @@ export async function registerPushToken(): Promise<void> {
   }
 }
 
+// Devuelve el Expo push token que ya quedó registrado en el backend para este
+// dispositivo (o null si aún no se registró). Solo lectura del cache local; la
+// pantalla de Notificaciones lo usa para mostrar si el dispositivo está listo.
+export async function getRegisteredPushToken(): Promise<string | null> {
+  return AsyncStorage.getItem(LAST_PUSH_TOKEN_KEY);
+}
+
 // Da de baja el token de este dispositivo en el backend (al cerrar sesión /
 // borrar cuenta) y limpia el cache local para que el próximo login lo vuelva a
 // registrar (re-asociándolo a la cuenta que entre).

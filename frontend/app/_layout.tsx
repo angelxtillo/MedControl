@@ -56,6 +56,15 @@ function AppStack() {
           headerTintColor: 'white',
         }}
       />
+      <Stack.Screen
+        name="notifications-settings"
+        options={{
+          headerShown: true,
+          title: t('settings.notifications'),
+          headerStyle: { backgroundColor: '#2196F3' },
+          headerTintColor: 'white',
+        }}
+      />
     </Stack>
     {/* Gate de aceptación: capa bloqueante para usuarios con sesión que aún no
         han aceptado los términos. Se renderiza sobre cualquier ruta. */}

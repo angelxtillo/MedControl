@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { MedicationCard } from '../../components/MedicationCard';
+import { NotificationPermissionBanner } from '../../components/NotificationPermissionBanner';
 import api from '../../utils/api';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRefreshOnResume } from '../../hooks/useRefreshOnResume';
@@ -330,6 +331,8 @@ export default function Home() {
           </Text>
         </View>
       </View>
+
+      <NotificationPermissionBanner />
 
       <ScrollView
         style={styles.content}
