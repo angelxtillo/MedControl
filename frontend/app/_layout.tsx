@@ -38,16 +38,6 @@ function AppStack() {
         }}
       />
       <Stack.Screen
-        name="medication/add"
-        options={{
-          presentation: 'modal',
-          headerShown: true,
-          title: t('medications.addMedication'),
-          headerStyle: { backgroundColor: '#2196F3' },
-          headerTintColor: 'white',
-        }}
-      />
-      <Stack.Screen
         name="medication/add-wizard"
         options={{
           headerShown: true,
