@@ -1621,6 +1621,14 @@ async def update_medication(
     # explícitamente como null significa "borrar el valor", no "no tocar".
     update_data = medication.dict(exclude_unset=True)
 
+    # notifications_enabled es el toggle GLOBAL deprecado (el scheduler ya no lo
+    # lee; la preferencia real es personal vía muted_by). Un APK viejo aún puede
+    # enviarlo: en vez de hacer $set del campo muerto —que dejaría al usuario
+    # creyendo que silenció el medicamento mientras los push siguen llegando— se
+    # traduce a muted_by de ESTE usuario, con la misma semántica que
+    # create_medication y el endpoint /reminders.
+    legacy_notif = update_data.pop("notifications_enabled", None)
+
     end_date = update_data.get("end_date")
     if end_date and end_date < existing["start_date"]:
         raise HTTPException(
@@ -1634,6 +1642,10 @@ async def update_medication(
             {"_id": ObjectId(medication_id)},
             {"$set": update_data}
         )
+
+    if legacy_notif is not None:
+        op = {"$pull": {"muted_by": user_id}} if legacy_notif else {"$addToSet": {"muted_by": user_id}}
+        await db.medications.update_one({"_id": ObjectId(medication_id)}, op)
     
     updated = await db.medications.find_one({"_id": ObjectId(medication_id)})
     return {
