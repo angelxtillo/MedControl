@@ -1561,7 +1561,13 @@ async def create_medication(medication: MedicationCreate, user_id: str = Depends
     })
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
-    
+
+    if medication.end_date and medication.end_date < medication.start_date:
+        raise HTTPException(
+            status_code=422,
+            detail="end_date cannot be earlier than start_date"
+        )
+
     # Normalize schedule times to HH:MM format
     normalized_times = []
     for time in medication.schedule_times:
@@ -1611,7 +1617,17 @@ async def update_medication(
     if not patient:
         raise HTTPException(status_code=404, detail="Access denied")
     
-    update_data = {k: v for k, v in medication.dict().items() if v is not None}
+    # exclude_unset (y no "is not None"): un end_date/instructions enviado
+    # explícitamente como null significa "borrar el valor", no "no tocar".
+    update_data = medication.dict(exclude_unset=True)
+
+    end_date = update_data.get("end_date")
+    if end_date and end_date < existing["start_date"]:
+        raise HTTPException(
+            status_code=422,
+            detail="end_date cannot be earlier than start_date"
+        )
+
     if update_data:
         update_data["updated_at"] = datetime.now(timezone.utc)
         await db.medications.update_one(
