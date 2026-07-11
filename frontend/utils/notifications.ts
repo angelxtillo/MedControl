@@ -11,7 +11,19 @@ import api from './api';
 // necesario para RECIBIR push: canal Android, permiso, handler de foreground
 // y registro del Expo push token.
 
-export const MEDICATION_CHANNEL = 'medication-reminders';
+// Canal v2: estrena el sonido propio de Dosaria. El sonido de un canal Android
+// es INMUTABLE tras crearlo, así que no se puede cambiar el del canal viejo
+// (medication-reminders, con sonido default que ya tienen todos los usuarios
+// actuales); la única vía es un id nuevo. El backend debe enviar este mismo
+// channelId, pero SOLO después de que este build esté instalado y abierto al
+// menos una vez (así el canal existe antes de recibir el primer push a v2).
+export const MEDICATION_CHANNEL = 'medication-reminders-v2';
+// Canal legado que se borra al crear el v2 para no dejar dos entradas en los
+// ajustes del sistema.
+const LEGACY_MEDICATION_CHANNEL = 'medication-reminders';
+// Archivo empaquetado en android/app/src/main/res/raw (ver "sounds" en app.json,
+// que el config plugin copia durante el prebuild de EAS).
+const MEDICATION_SOUND = 'dosaria_alert.wav';
 
 // Último Expo push token enviado al backend (por dispositivo). Sirve para no
 // reenviarlo en cada arranque y para re-registrarlo si cambia o si se cambia de
@@ -37,10 +49,13 @@ export async function requestNotificationPermissions(): Promise<boolean> {
     await Notifications.setNotificationChannelAsync(MEDICATION_CHANNEL, {
       name: 'Recordatorios de medicamentos',
       importance: Notifications.AndroidImportance.MAX,
-      sound: 'default',
+      sound: MEDICATION_SOUND,
       vibrationPattern: [0, 250, 250, 250],
       lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
     });
+    // Borrar el canal viejo (sonido default) para no dejar dos entradas en los
+    // ajustes del sistema. Idempotente: no falla si ya no existe.
+    await Notifications.deleteNotificationChannelAsync(LEGACY_MEDICATION_CHANNEL).catch(() => {});
   }
   const current = await Notifications.getPermissionsAsync();
   if (current.granted) return true;

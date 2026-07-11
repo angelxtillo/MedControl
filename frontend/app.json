@@ -71,7 +71,10 @@
       [
         "expo-notifications",
         {
-          "color": "#2196F3"
+          "color": "#2196F3",
+          "sounds": [
+            "./assets/sounds/dosaria_alert.wav"
+          ]
         }
       ],
       [
