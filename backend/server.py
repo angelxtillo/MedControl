@@ -1238,17 +1238,21 @@ async def send_push_to_tokens(
     if not valid:
         return {"sent": 0, "tickets": [], "removed_tokens": []}
 
-    # channelId: canal Android "medication-reminders" (importancia MAX) que la
-    # app crea al pedir el permiso; todo dispositivo con token registrado pasó
-    # por ahí. priority high: entrega inmediata aunque el teléfono esté en doze.
+    # channelId: canal Android "medication-reminders-v2" (importancia MAX, sonido
+    # propio) que la app crea al pedir el permiso. En Android el sonido lo fija el
+    # canal, no este payload. DESPLIEGUE ESCALONADO: enviar a v2 solo DESPUÉS de
+    # que el build de frontend con ese canal esté instalado y abierto; si no, un
+    # cliente sin el canal v2 podría no mostrar la notificación. El campo `sound`
+    # aquí es para iOS (nombre del archivo empaquetado). priority high: entrega
+    # inmediata aunque el teléfono esté en doze.
     messages = [
         {
             "to": t,
             "title": title,
             "body": body,
-            "sound": "default",
+            "sound": "dosaria_alert.wav",
             "priority": "high",
-            "channelId": "medication-reminders",
+            "channelId": "medication-reminders-v2",
             "data": data or {},
         }
         for t in valid
