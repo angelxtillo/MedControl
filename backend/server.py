@@ -955,6 +955,15 @@ async def delete_account(body: DeleteAccountRequest, user_id: str = Depends(get_
         {"$pull": {"caregiver_ids": user_id}}
     )
 
+    # Anonimizar la atribución en logs de pacientes ajenos: la Política de
+    # Privacidad promete que borrar la cuenta borra los datos del usuario.
+    # Se conserva logged_by (id ya irresoluble) para que el historial degrade
+    # a "Cuidador" genérico en vez de perder el registro de que alguien marcó.
+    await db.medication_logs.update_many(
+        {"logged_by": user_id},
+        {"$unset": {"logged_by_name": ""}}
+    )
+
     await db.caregivers.delete_one({"_id": ObjectId(user_id)})
     return {"message": "Cuenta eliminada permanentemente"}
 
@@ -1713,6 +1722,26 @@ async def delete_medication(medication_id: str, user_id: str = Depends(get_curre
     return {"message": "Medication deleted successfully"}
 
 # ============= MEDICATION LOG ENDPOINTS =============
+async def get_caregiver_name(user_id: str) -> Optional[str]:
+    """Nombre del cuidador, para el snapshot logged_by_name de los logs."""
+    caregiver = await db.caregivers.find_one({"_id": ObjectId(user_id)}, {"name": 1})
+    return caregiver.get("name") if caregiver else None
+
+
+async def logged_by_names(logs: list) -> dict:
+    """Nombre ACTUAL de cada cuidador que marcó dosis en `logs`, en una sola
+    consulta. Quien no aparezca (cuenta borrada) degrada al snapshot del log,
+    que a su vez se anula al borrar la cuenta (ver delete_account)."""
+    ids = {log.get("logged_by") for log in logs if log.get("logged_by")}
+    object_ids = [ObjectId(i) for i in ids if ObjectId.is_valid(i)]
+    if not object_ids:
+        return {}
+    caregivers = await db.caregivers.find(
+        {"_id": {"$in": object_ids}}, {"name": 1}
+    ).to_list(len(object_ids))
+    return {str(c["_id"]): c["name"] for c in caregivers}
+
+
 @api_router.get("/logs/patient/{patient_id}")
 async def get_logs(
     patient_id: str,
@@ -1732,6 +1761,7 @@ async def get_logs(
         logs = await db.medication_logs.find(
             {"patient_id": patient_id}
         ).sort("scheduled_datetime", -1).to_list(200)
+        names = await logged_by_names(logs)
         return [
             {
                 "id": str(log["_id"]),
@@ -1741,6 +1771,8 @@ async def get_logs(
                 "taken_datetime": log.get("taken_datetime"),
                 "status": log["status"],
                 "notes": log.get("notes"),
+                "logged_by": log.get("logged_by"),
+                "logged_by_name": names.get(log.get("logged_by")) or log.get("logged_by_name"),
                 "created_at": log["created_at"].isoformat()
             }
             for log in logs
@@ -1767,6 +1799,7 @@ async def get_logs(
         for log in real_logs
     }
 
+    names = await logged_by_names(real_logs)
     real_logs_out = [
         {
             "id": str(log["_id"]),
@@ -1777,6 +1810,8 @@ async def get_logs(
             "taken_datetime": log.get("taken_datetime"),
             "status": log["status"],
             "notes": log.get("notes"),
+            "logged_by": log.get("logged_by"),
+            "logged_by_name": names.get(log.get("logged_by")) or log.get("logged_by_name"),
             "is_synthetic": False,
             "created_at": log["created_at"].isoformat()
         }
@@ -1844,6 +1879,8 @@ async def get_logs(
                     "taken_datetime": None,
                     "status": "missed",
                     "notes": None,
+                    "logged_by": None,
+                    "logged_by_name": None,
                     "is_synthetic": True,
                     "created_at": scheduled_dt
                 })
@@ -1874,6 +1911,8 @@ async def create_log(log: MedicationLogCreate, user_id: str = Depends(get_curren
     if log.status == "taken" and not taken_dt:
         taken_dt = datetime.now(timezone.utc).isoformat()
 
+    logged_by_name = await get_caregiver_name(user_id)
+
     # Upsert: si ya existe log para (medication_id, scheduled_datetime), actualizar.
     # patient_id en el filtro como defensa adicional: nunca tocar el log de otro paciente.
     existing = await db.medication_logs.find_one({
@@ -1883,9 +1922,12 @@ async def create_log(log: MedicationLogCreate, user_id: str = Depends(get_curren
     })
 
     if existing:
+        # Re-marcar una dosis re-atribuye al cuidador que hizo el cambio.
         update_fields = {
             "status": log.status,
             "notes": log.notes,
+            "logged_by": user_id,
+            "logged_by_name": logged_by_name,
         }
         if taken_dt:
             update_fields["taken_datetime"] = taken_dt
@@ -1903,12 +1945,16 @@ async def create_log(log: MedicationLogCreate, user_id: str = Depends(get_curren
             "taken_datetime": updated.get("taken_datetime"),
             "status": updated["status"],
             "notes": updated.get("notes"),
+            "logged_by": updated.get("logged_by"),
+            "logged_by_name": updated.get("logged_by_name"),
             "created_at": ensure_naive(updated["created_at"]).isoformat() if updated.get("created_at") else None
         }
 
     # Crear nuevo log
     log_dict = {
         **log.dict(),
+        "logged_by": user_id,
+        "logged_by_name": logged_by_name,
         "created_at": datetime.now(timezone.utc)
     }
     if taken_dt:
@@ -1919,6 +1965,8 @@ async def create_log(log: MedicationLogCreate, user_id: str = Depends(get_curren
         "id": str(result.inserted_id),
         **log.dict(),
         "taken_datetime": taken_dt,
+        "logged_by": user_id,
+        "logged_by_name": logged_by_name,
         "created_at": log_dict["created_at"].isoformat()
     }
 
@@ -1942,12 +1990,16 @@ async def update_log(
     update_data = log.dict()
     if not update_data.get("taken_datetime") and log.status == "taken":
         update_data["taken_datetime"] = datetime.now(timezone.utc).isoformat()
-    
+
+    # Re-marcar una dosis re-atribuye al cuidador que hizo el cambio.
+    update_data["logged_by"] = user_id
+    update_data["logged_by_name"] = await get_caregiver_name(user_id)
+
     await db.medication_logs.update_one(
         {"_id": ObjectId(log_id)},
         {"$set": update_data}
     )
-    
+
     updated = await db.medication_logs.find_one({"_id": ObjectId(log_id)})
     return {
         "id": str(updated["_id"]),
@@ -1957,6 +2009,8 @@ async def update_log(
         "taken_datetime": updated.get("taken_datetime"),
         "status": updated["status"],
         "notes": updated.get("notes"),
+        "logged_by": updated.get("logged_by"),
+        "logged_by_name": updated.get("logged_by_name"),
         "created_at": updated["created_at"].isoformat()
     }
 

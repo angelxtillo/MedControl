@@ -339,7 +339,9 @@
     "filterAll": "Todos",
     "filterTaken": "Tomados",
     "filterSkipped": "Saltados",
-    "filterMissed": "Perdidos"
+    "filterMissed": "Perdidos",
+    "markedBy": "por {{name}}",
+    "genericCaregiver": "Cuidador"
   },
   "assistant": {
     "title": "Asistente IA",

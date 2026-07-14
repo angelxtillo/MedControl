@@ -33,6 +33,10 @@ interface Log {
   taken_datetime?: string;
   status: string;
   notes?: string;
+  // Atribución: id del cuidador que marcó y su nombre resuelto por el backend
+  // (null si la cuenta fue eliminada → mostrar "Cuidador" genérico).
+  logged_by?: string | null;
+  logged_by_name?: string | null;
   is_synthetic?: boolean;
 }
 
@@ -323,6 +327,14 @@ export default function History() {
                             {getTimeDetail(log)}
                           </Text>
                         )}
+                        {log.logged_by && (
+                          <View style={styles.loggedByRow}>
+                            <Ionicons name="person-outline" size={12} color="#999" />
+                            <Text style={styles.loggedByText}>
+                              {t('history.markedBy', { name: log.logged_by_name || t('history.genericCaregiver') })}
+                            </Text>
+                          </View>
+                        )}
                       </View>
                       <View style={[styles.statusBadge, { backgroundColor: getStatusColor(log.status) }]}>
                         <Text style={styles.statusBadgeText}>{getStatusText(log.status)}</Text>
@@ -493,6 +505,16 @@ const styles = StyleSheet.create({
   },
   timeDetailSkipped: {
     color: '#FF9800',
+  },
+  loggedByRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+  },
+  loggedByText: {
+    fontSize: 12,
+    color: '#999',
   },
   statusBadge: {
     paddingHorizontal: 12,

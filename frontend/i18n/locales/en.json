@@ -339,7 +339,9 @@
     "filterAll": "All",
     "filterTaken": "Taken",
     "filterSkipped": "Skipped",
-    "filterMissed": "Missed"
+    "filterMissed": "Missed",
+    "markedBy": "by {{name}}",
+    "genericCaregiver": "Caregiver"
   },
   "assistant": {
     "title": "AI Assistant",

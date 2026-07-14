@@ -339,7 +339,9 @@
     "filterAll": "Tous",
     "filterTaken": "Pris",
     "filterSkipped": "Sautés",
-    "filterMissed": "Manqués"
+    "filterMissed": "Manqués",
+    "markedBy": "par {{name}}",
+    "genericCaregiver": "Soignant"
   },
   "assistant": {
     "title": "Assistant IA",
