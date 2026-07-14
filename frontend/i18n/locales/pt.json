@@ -341,7 +341,9 @@
     "filterSkipped": "Ignorados",
     "filterMissed": "Perdidos",
     "markedBy": "por {{name}}",
-    "genericCaregiver": "Cuidador"
+    "genericCaregiver": "Cuidador",
+    "today": "Hoje",
+    "yesterday": "Ontem"
   },
   "assistant": {
     "title": "Assistente IA",

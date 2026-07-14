@@ -341,7 +341,9 @@
     "filterSkipped": "Skipped",
     "filterMissed": "Missed",
     "markedBy": "by {{name}}",
-    "genericCaregiver": "Caregiver"
+    "genericCaregiver": "Caregiver",
+    "today": "Today",
+    "yesterday": "Yesterday"
   },
   "assistant": {
     "title": "AI Assistant",

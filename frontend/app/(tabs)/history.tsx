@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRefreshOnResume } from '../../hooks/useRefreshOnResume';
 import api from '../../utils/api';
-import { format } from 'date-fns';
+import { format, isToday, isYesterday } from 'date-fns';
 import { es, enUS, ptBR, fr as frLocale } from 'date-fns/locale';
 import { useTranslation } from 'react-i18next';
 import i18n from '../../i18n';
@@ -51,11 +51,21 @@ const FILTER_BUTTONS: { key: StatusFilter; labelKey: string; activeColor: string
 
 const dateFnsLocales: Record<string, typeof es> = { es, en: enUS, pt: ptBR, fr: frLocale };
 
-const dateFormats: Record<string, string> = {
-  es: "d 'de' MMMM, yyyy",
-  en: 'MMMM d, yyyy',
-  pt: "d 'de' MMMM, yyyy",
-  fr: 'd MMMM yyyy',
+// Header de cada grupo de día; el año solo aparece cuando no es el año en curso.
+const dayFormats: Record<string, { sameYear: string; otherYear: string }> = {
+  es: { sameYear: "EEEE, d 'de' MMMM", otherYear: "EEEE, d 'de' MMMM 'de' yyyy" },
+  en: { sameYear: 'EEEE, MMMM d', otherYear: 'EEEE, MMMM d, yyyy' },
+  pt: { sameYear: "EEEE, d 'de' MMMM", otherYear: "EEEE, d 'de' MMMM 'de' yyyy" },
+  fr: { sameYear: 'EEEE d MMMM', otherYear: 'EEEE d MMMM yyyy' },
+};
+
+// Tinte suave + color de ícono/texto por estado — los mismos pares que usan
+// los badges de estadísticas del header, para que todo quede en una paleta.
+const STATUS_STYLES: Record<string, { icon: any; tint: string; iconColor: string; textColor: string }> = {
+  taken:   { icon: 'checkmark-circle', tint: '#E8F5E9', iconColor: '#4CAF50', textColor: '#2E7D32' },
+  skipped: { icon: 'remove-circle',    tint: '#FFF3E0', iconColor: '#FF9800', textColor: '#E65100' },
+  missed:  { icon: 'close-circle',     tint: '#FFEBEE', iconColor: '#f44336', textColor: '#C62828' },
+  pending: { icon: 'time',             tint: '#F0F0F0', iconColor: '#999',    textColor: '#666' },
 };
 
 export default function History() {
@@ -143,14 +153,7 @@ export default function History() {
     return med ? med.name : t('common.unknown');
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'taken':   return '#4CAF50';
-      case 'missed':  return '#f44336';
-      case 'skipped': return '#FF9800';
-      default:        return '#999';
-    }
-  };
+  const styleFor = (status: string) => STATUS_STYLES[status] ?? STATUS_STYLES.pending;
 
   const getStatusText = (status: string) => {
     switch (status) {
@@ -161,18 +164,9 @@ export default function History() {
     }
   };
 
-  const getStatusIcon = (status: string): any => {
-    switch (status) {
-      case 'taken':   return 'checkmark-circle';
-      case 'missed':  return 'close-circle';
-      case 'skipped': return 'remove-circle';
-      default:        return 'time';
-    }
-  };
-
   const formatTime = (datetimeStr: string): string => {
     try {
-      return new Date(datetimeStr).toLocaleTimeString('es-CO', {
+      return new Date(datetimeStr).toLocaleTimeString([], {
         hour: '2-digit',
         minute: '2-digit',
         hour12: false,
@@ -182,24 +176,46 @@ export default function History() {
     }
   };
 
-  const getTimeDetail = (log: Log): string | null => {
-    switch (log.status) {
-      case 'taken':
-        if (log.taken_datetime) return t('history.takenAt', { time: formatTime(log.taken_datetime) });
-        return t('history.takenNoTime');
-      case 'missed':
-        return t('history.notTaken', { time: formatTime(log.scheduled_datetime) });
-      case 'skipped':
-        if (log.taken_datetime) return t('history.skippedAt', { time: formatTime(log.taken_datetime) });
-        return t('history.skipped');
-      default:
-        return null;
+  // "08:00 · Tomado a las 08:12": hora programada siempre; la hora real solo
+  // cuando existe. Para perdidos basta la programada — el chip ya dice el estado.
+  const timeLine = (log: Log): string => {
+    const scheduled = formatTime(log.scheduled_datetime);
+    let detail: string | null = null;
+    if (log.status === 'taken') {
+      detail = log.taken_datetime
+        ? t('history.takenAt', { time: formatTime(log.taken_datetime) })
+        : t('history.takenNoTime');
+    } else if (log.status === 'skipped' && log.taken_datetime) {
+      detail = t('history.skippedAt', { time: formatTime(log.taken_datetime) });
     }
+    return detail ? `${scheduled} · ${detail}` : scheduled;
+  };
+
+  const dayLabel = (dateStr: string): string => {
+    const d = new Date(`${dateStr}T00:00:00`);
+    if (isToday(d)) return t('history.today');
+    if (isYesterday(d)) return t('history.yesterday');
+    const lang = i18n.language?.split('-')[0] || 'es';
+    const formats = dayFormats[lang] ?? dayFormats.es;
+    const pattern = d.getFullYear() === new Date().getFullYear()
+      ? formats.sameYear
+      : formats.otherYear;
+    return format(d, pattern, { locale: dateFnsLocales[lang] ?? es });
   };
 
   const filteredLogs = statusFilter === 'all'
     ? logs
     : logs.filter(log => log.status === statusFilter);
+
+  // Los logs llegan ordenados desc por scheduled_datetime; agrupar por día
+  // preservando ese orden.
+  const groupedLogs: { date: string; items: Log[] }[] = [];
+  for (const log of filteredLogs) {
+    const date = log.scheduled_datetime.slice(0, 10);
+    const last = groupedLogs[groupedLogs.length - 1];
+    if (last && last.date === date) last.items.push(log);
+    else groupedLogs.push({ date, items: [log] });
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -300,49 +316,42 @@ export default function History() {
                   <Text style={styles.emptyText}>{t('history.noHistoryForPatient')}</Text>
                 </View>
               ) : (
-                filteredLogs.map((log) => (
-                  <View key={log.id} style={styles.logCard}>
-                    <View style={styles.logHeader}>
-                      <View style={[styles.statusIndicator, { backgroundColor: getStatusColor(log.status) }]}>
-                        <Ionicons name={getStatusIcon(log.status)} size={20} color="white" />
-                      </View>
-                      <View style={styles.logInfo}>
-                        <Text style={styles.medicationName}>{getMedicationName(log)}</Text>
-                        <Text style={styles.logDate}>
-                          {(() => {
-                            const lang = i18n.language?.split('-')[0] || 'es';
-                            return format(new Date(log.scheduled_datetime), dateFormats[lang] ?? dateFormats.es, { locale: dateFnsLocales[lang] ?? es });
-                          })()}
-                        </Text>
-                        <Text style={styles.scheduledTime}>
-                          {t('history.scheduled', { time: formatTime(log.scheduled_datetime) })}
-                        </Text>
-                        {getTimeDetail(log) !== null && (
-                          <Text style={[
-                            styles.timeDetail,
-                            log.status === 'taken'   && styles.timeDetailTaken,
-                            log.status === 'missed'  && styles.timeDetailMissed,
-                            log.status === 'skipped' && styles.timeDetailSkipped,
-                          ]}>
-                            {getTimeDetail(log)}
-                          </Text>
-                        )}
-                        {log.logged_by && (
-                          <View style={styles.loggedByRow}>
-                            <Ionicons name="person-outline" size={12} color="#999" />
-                            <Text style={styles.loggedByText}>
-                              {t('history.markedBy', { name: log.logged_by_name || t('history.genericCaregiver') })}
-                            </Text>
+                groupedLogs.map((group) => (
+                  <View key={group.date}>
+                    <Text style={styles.dayHeader}>{dayLabel(group.date)}</Text>
+                    <View style={styles.dayCard}>
+                      {group.items.map((log, idx) => {
+                        const s = styleFor(log.status);
+                        return (
+                          <View key={log.id} style={[styles.logRow, idx > 0 && styles.logRowBorder]}>
+                            <View style={[styles.statusCircle, { backgroundColor: s.tint }]}>
+                              <Ionicons name={s.icon} size={20} color={s.iconColor} />
+                            </View>
+                            <View style={styles.logInfo}>
+                              <Text style={styles.medicationName}>{getMedicationName(log)}</Text>
+                              <Text style={styles.timeLine}>{timeLine(log)}</Text>
+                              {log.logged_by && (
+                                <View style={styles.loggedByRow}>
+                                  <Ionicons name="person-outline" size={12} color="#999" />
+                                  <Text style={styles.loggedByText}>
+                                    {t('history.markedBy', { name: log.logged_by_name || t('history.genericCaregiver') })}
+                                  </Text>
+                                </View>
+                              )}
+                              {log.notes && (
+                                <Text style={styles.logNotes}>{t('history.note')}: {log.notes}</Text>
+                              )}
+                            </View>
+                            <View style={[styles.statusChip, { backgroundColor: s.tint }]}>
+                              <Ionicons name={s.icon} size={12} color={s.textColor} />
+                              <Text style={[styles.statusChipText, { color: s.textColor }]}>
+                                {getStatusText(log.status)}
+                              </Text>
+                            </View>
                           </View>
-                        )}
-                      </View>
-                      <View style={[styles.statusBadge, { backgroundColor: getStatusColor(log.status) }]}>
-                        <Text style={styles.statusBadgeText}>{getStatusText(log.status)}</Text>
-                      </View>
+                        );
+                      })}
                     </View>
-                    {log.notes && (
-                      <Text style={styles.logNotes}>{t('history.note')}: {log.notes}</Text>
-                    )}
                   </View>
                 ))
               )}
@@ -446,25 +455,38 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: 'center',
   },
-  logCard: {
+  dayHeader: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#8A94A6',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginBottom: 8,
+    marginLeft: 4,
+  },
+  dayCard: {
     backgroundColor: 'white',
     borderRadius: 16,
-    padding: 16,
-    marginBottom: 14,
+    marginBottom: 20,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
     shadowRadius: 8,
   },
-  logHeader: {
+  logRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
+    padding: 14,
   },
-  statusIndicator: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  logRowBorder: {
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+  },
+  statusCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -473,38 +495,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   medicationName: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     color: '#1565C0',
-    marginBottom: 4,
   },
-  logDate: {
-    fontSize: 14,
+  timeLine: {
+    fontSize: 13,
     color: '#666',
-    marginBottom: 2,
-  },
-  takenDate: {
-    fontSize: 12,
-    color: '#4CAF50',
-  },
-  scheduledTime: {
-    fontSize: 13,
-    color: '#888',
-    marginBottom: 2,
-  },
-  timeDetail: {
-    fontSize: 13,
-    fontWeight: '500',
     marginTop: 2,
-  },
-  timeDetailTaken: {
-    color: '#4CAF50',
-  },
-  timeDetailMissed: {
-    color: '#f44336',
-  },
-  timeDetailSkipped: {
-    color: '#FF9800',
   },
   loggedByRow: {
     flexDirection: 'row',
@@ -516,23 +514,23 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#999',
   },
-  statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+  statusChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: 12,
+    marginLeft: 8,
   },
-  statusBadgeText: {
-    color: 'white',
+  statusChipText: {
     fontSize: 12,
     fontWeight: '600',
   },
   logNotes: {
-    marginTop: 12,
-    fontSize: 14,
+    marginTop: 6,
+    fontSize: 13,
     color: '#666',
     fontStyle: 'italic',
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
   },
 });

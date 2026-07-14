@@ -341,7 +341,9 @@
     "filterSkipped": "Sautés",
     "filterMissed": "Manqués",
     "markedBy": "par {{name}}",
-    "genericCaregiver": "Soignant"
+    "genericCaregiver": "Soignant",
+    "today": "Aujourd'hui",
+    "yesterday": "Hier"
   },
   "assistant": {
     "title": "Assistant IA",

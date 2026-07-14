@@ -341,7 +341,9 @@
     "filterSkipped": "Saltados",
     "filterMissed": "Perdidos",
     "markedBy": "por {{name}}",
-    "genericCaregiver": "Cuidador"
+    "genericCaregiver": "Cuidador",
+    "today": "Hoy",
+    "yesterday": "Ayer"
   },
   "assistant": {
     "title": "Asistente IA",
