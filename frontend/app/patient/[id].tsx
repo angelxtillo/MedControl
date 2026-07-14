@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
 import { useRefreshOnResume } from '../../hooks/useRefreshOnResume';
 import api from '../../utils/api';
+import { pickPatientPhoto } from '../../utils/patientPhoto';
 import { getApiErrorMessage } from '../../utils/errors';
 import CaregiversManager from '../../components/CaregiversManager';
 import { useTranslation } from 'react-i18next';
@@ -63,6 +64,7 @@ export default function PatientDetail() {
   const [editName, setEditName] = useState('');
   const [editAge, setEditAge] = useState('');
   const [editNotes, setEditNotes] = useState('');
+  const [editPhoto, setEditPhoto] = useState<string | null>(null);
   const [editTimezone, setEditTimezone] = useState(DEFAULT_TIMEZONE);
   const [tzPickerVisible, setTzPickerVisible] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -94,6 +96,7 @@ export default function PatientDetail() {
       setEditName(patient.name);
       setEditAge(patient.age ? patient.age.toString() : '');
       setEditNotes(patient.notes || '');
+      setEditPhoto(patient.photo || null);
       setEditTimezone(patient.timezone || DEFAULT_TIMEZONE);
     }
   }, [patient]);
@@ -225,6 +228,11 @@ export default function PatientDetail() {
     setEditModalVisible(true);
   };
 
+  const pickImage = async () => {
+    const photoUri = await pickPatientPhoto();
+    if (photoUri) setEditPhoto(photoUri);
+  };
+
   const handleSavePatient = async () => {
     if (!editName.trim()) {
       Alert.alert(t('common.error'), t('patients.nameRequired2'));
@@ -255,6 +263,7 @@ export default function PatientDetail() {
         updateData.notes = null;
       }
 
+      updateData.photo = editPhoto;
       updateData.timezone = editTimezone;
 
       await api.put(`/patients/${id}`, updateData);
@@ -460,7 +469,18 @@ export default function PatientDetail() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalForm}>
+            <ScrollView style={styles.modalForm} keyboardShouldPersistTaps="handled">
+              <TouchableOpacity style={styles.photoButton} onPress={pickImage}>
+                {editPhoto ? (
+                  <Image source={{ uri: editPhoto }} style={styles.photoPreview} />
+                ) : (
+                  <View style={styles.photoPlaceholder}>
+                    <Ionicons name="camera" size={32} color="#999" />
+                    <Text style={styles.photoText}>{t('patients.addPhoto')}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>{t('patients.name')} *</Text>
                 <TextInput
@@ -903,6 +923,28 @@ const styles = StyleSheet.create({
   },
   modalForm: {
     padding: 20,
+  },
+  photoButton: {
+    alignSelf: 'center',
+    marginBottom: 24,
+  },
+  photoPreview: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+  },
+  photoPlaceholder: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#f0f0f0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  photoText: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 8,
   },
   inputGroup: {
     marginBottom: 20,

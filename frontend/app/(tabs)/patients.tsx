@@ -19,7 +19,7 @@ import { PatientCard } from '../../components/PatientCard';
 import { router, useFocusEffect } from 'expo-router';
 import { useRefreshOnResume } from '../../hooks/useRefreshOnResume';
 import api from '../../utils/api';
-import * as ImagePicker from 'expo-image-picker';
+import { pickPatientPhoto } from '../../utils/patientPhoto';
 import { useTranslation } from 'react-i18next';
 import { getDeviceTimezone } from '../../utils/timezones';
 import { AcceptInvitationModal } from '../../components/AcceptInvitationModal';
@@ -37,7 +37,6 @@ export default function Patients() {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
-  const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
   const [name, setName] = useState('');
   const [age, setAge] = useState('');
   const [notes, setNotes] = useState('');
@@ -80,17 +79,8 @@ export default function Patients() {
   };
 
   const pickImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.5,
-      base64: true,
-    });
-
-    if (!result.canceled && result.assets[0].base64) {
-      setPhoto(`data:image/jpeg;base64,${result.assets[0].base64}`);
-    }
+    const photoUri = await pickPatientPhoto();
+    if (photoUri) setPhoto(photoUri);
   };
 
   const handleAddPatient = async () => {
@@ -109,43 +99,24 @@ export default function Patients() {
 
     setLoading(true);
     try {
-      if (editingPatient) {
-        await api.put(`/patients/${editingPatient.id}`, {
-          name,
-          age: age ? parseInt(age, 10) : null,
-          notes,
-          photo,
-        });
-        Alert.alert(t('common.success'), t('patients.patientUpdated'));
-      } else {
-        // Autodetecta la zona del dispositivo (ej. "America/Bogota"); el
-        // cuidador no hace nada en el caso normal y puede cambiarla luego en la ficha.
-        await api.post('/patients', {
-          name,
-          age: age ? parseInt(age, 10) : null,
-          notes,
-          photo,
-          timezone: getDeviceTimezone(),
-        });
-        Alert.alert(t('common.success'), t('patients.patientAdded'));
-      }
+      // Autodetecta la zona del dispositivo (ej. "America/Bogota"); el
+      // cuidador no hace nada en el caso normal y puede cambiarla luego en la ficha.
+      await api.post('/patients', {
+        name,
+        age: age ? parseInt(age, 10) : null,
+        notes,
+        photo,
+        timezone: getDeviceTimezone(),
+      });
+      Alert.alert(t('common.success'), t('patients.patientAdded'));
       setModalVisible(false);
       resetForm();
       loadPatients();
     } catch (error) {
-      Alert.alert(t('common.error'), editingPatient ? t('patients.errorUpdate') : t('patients.errorCreate'));
+      Alert.alert(t('common.error'), t('patients.errorCreate'));
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleEditPatient = (patient: Patient) => {
-    setEditingPatient(patient);
-    setName(patient.name);
-    setAge(patient.age?.toString() || '');
-    setNotes(patient.notes || '');
-    setPhoto(patient.photo || null);
-    setModalVisible(true);
   };
 
   const resetForm = () => {
@@ -153,7 +124,6 @@ export default function Patients() {
     setAge('');
     setNotes('');
     setPhoto(null);
-    setEditingPatient(null);
   };
 
   return (
@@ -189,18 +159,11 @@ export default function Patients() {
               <Ionicons name="chevron-forward" size={14} color="#2196F3" />
             </TouchableOpacity>
             {patients.map((patient) => (
-              <View key={patient.id} style={styles.patientItem}>
-                <PatientCard
-                  {...patient}
-                  onPress={() => router.push(`/patient/${patient.id}`)}
-                />
-                <TouchableOpacity
-                  style={styles.editButton}
-                  onPress={() => handleEditPatient(patient)}
-                >
-                  <Ionicons name="pencil" size={20} color="#2196F3" />
-                </TouchableOpacity>
-              </View>
+              <PatientCard
+                key={patient.id}
+                {...patient}
+                onPress={() => router.push(`/patient/${patient.id}`)}
+              />
             ))}
           </>
         )}
@@ -225,9 +188,7 @@ export default function Patients() {
         >
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
-                {editingPatient ? t('patients.editPatient') : t('patients.addPatient')}
-              </Text>
+              <Text style={styles.modalTitle}>{t('patients.addPatient')}</Text>
               <TouchableOpacity onPress={() => {
                 setModalVisible(false);
                 resetForm();
@@ -465,20 +426,5 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 18,
     fontWeight: '600',
-  },
-  patientItem: {
-    position: 'relative',
-  },
-  editButton: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
-    backgroundColor: '#E3F2FD',
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 10,
   },
 });
