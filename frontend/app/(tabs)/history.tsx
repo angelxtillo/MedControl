@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRefreshOnResume } from '../../hooks/useRefreshOnResume';
 import api from '../../utils/api';
+import { hasMutatedSince } from '../../utils/mutations';
 import { format, isToday, isYesterday } from 'date-fns';
 import { es, enUS, ptBR, fr as frLocale } from 'date-fns/locale';
 import { useTranslation } from 'react-i18next';
@@ -85,7 +86,9 @@ export default function History() {
   // (el hook ya exige >60s en background o cambio de día).
   useFocusEffect(
     useCallback(() => {
-      if (Date.now() - lastRefresh.current < 30000) return;
+      // El throttle se perdona si hubo una mutación (p. ej. marcar una dosis
+      // en Inicio) después de la última carga.
+      if (!hasMutatedSince(lastRefresh.current) && Date.now() - lastRefresh.current < 30000) return;
       refreshData();
     }, [selectedPatient])
   );

@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
 import { useRefreshOnResume } from '../../hooks/useRefreshOnResume';
 import api from '../../utils/api';
+import { markMutation, hasMutatedSince } from '../../utils/mutations';
 import { pickPatientPhoto } from '../../utils/patientPhoto';
 import { getApiErrorMessage } from '../../utils/errors';
 import CaregiversManager from '../../components/CaregiversManager';
@@ -78,7 +79,9 @@ export default function PatientDetail() {
   useFocusEffect(
     useCallback(() => {
       const sameId = loadedId.current === id;
-      if (sameId && Date.now() - lastRefresh.current < 30000) return;
+      // El throttle se perdona si hubo una mutación (p. ej. crear/editar un
+      // medicamento y volver con router.back()) después de la última carga.
+      if (sameId && !hasMutatedSince(lastRefresh.current) && Date.now() - lastRefresh.current < 30000) return;
       loadedId.current = id as string;
       lastRefresh.current = Date.now();
       loadPatientData();
@@ -134,6 +137,7 @@ export default function PatientDetail() {
           onPress: async () => {
             try {
               await api.delete(`/patients/${id}`);
+              markMutation();
               Alert.alert(t('common.success'), t('medications.patientDeleted'));
               router.back();
             } catch (error: any) {
@@ -166,6 +170,7 @@ export default function PatientDetail() {
           onPress: async () => {
             try {
               await api.post(`/patients/${id}/leave`);
+              markMutation();
               Alert.alert(t('common.success'), t('patients.leftPatient'));
               router.back();
             } catch (error: any) {
@@ -190,6 +195,7 @@ export default function PatientDetail() {
           onPress: async () => {
             try {
               await api.delete(`/medications/${medicationId}`);
+              markMutation();
               Alert.alert(t('common.success'), t('medications.deleted'));
               loadPatientData();
             } catch (error) {
@@ -206,6 +212,7 @@ export default function PatientDetail() {
       await api.put(`/medications/${medicationId}`, {
         active: !currentStatus,
       });
+      markMutation();
       loadPatientData();
     } catch (error) {
       Alert.alert(t('common.error'), t('medications.errorUpdateStatus'));
@@ -218,6 +225,7 @@ export default function PatientDetail() {
       await api.put(`/medications/${medicationId}/reminders`, {
         enabled: !currentStatus,
       });
+      markMutation();
       loadPatientData();
     } catch (error) {
       Alert.alert(t('common.error'), t('medications.errorUpdateNotifications'));
@@ -267,7 +275,7 @@ export default function PatientDetail() {
       updateData.timezone = editTimezone;
 
       await api.put(`/patients/${id}`, updateData);
-      
+      markMutation();
       Alert.alert(t('common.success'), t('patients.patientUpdated'));
       setEditModalVisible(false);
       loadPatientData();

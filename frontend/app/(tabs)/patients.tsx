@@ -19,6 +19,7 @@ import { PatientCard } from '../../components/PatientCard';
 import { router, useFocusEffect } from 'expo-router';
 import { useRefreshOnResume } from '../../hooks/useRefreshOnResume';
 import api from '../../utils/api';
+import { markMutation, hasMutatedSince } from '../../utils/mutations';
 import { pickPatientPhoto } from '../../utils/patientPhoto';
 import { useTranslation } from 'react-i18next';
 import { getDeviceTimezone } from '../../utils/timezones';
@@ -51,7 +52,9 @@ export default function Patients() {
   // llaman a loadPatients() directo y no pasan por el throttle.
   useFocusEffect(
     useCallback(() => {
-      if (Date.now() - lastRefresh.current < 30000) return;
+      // El throttle se perdona si hubo una mutación (p. ej. editar o eliminar
+      // un paciente en su perfil) después de la última carga.
+      if (!hasMutatedSince(lastRefresh.current) && Date.now() - lastRefresh.current < 30000) return;
       lastRefresh.current = Date.now();
       loadPatients();
     }, [])
@@ -108,6 +111,7 @@ export default function Patients() {
         photo,
         timezone: getDeviceTimezone(),
       });
+      markMutation();
       Alert.alert(t('common.success'), t('patients.patientAdded'));
       setModalVisible(false);
       resetForm();

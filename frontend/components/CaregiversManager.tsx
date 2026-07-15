@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../utils/api';
+import { markMutation } from '../utils/mutations';
 import { getApiErrorMessage } from '../utils/errors';
 import { useTranslation } from 'react-i18next';
 
@@ -71,6 +72,7 @@ export default function CaregiversManager({
         patient_id: patientId,
         invitee_email: inviteEmail.trim().toLowerCase(),
       });
+      markMutation();
       Alert.alert(
         `✉️ ${t('caregivers.inviteSent')}`,
         t('caregivers.inviteSentDesc')
@@ -107,6 +109,7 @@ export default function CaregiversManager({
           onPress: async () => {
             try {
               await api.delete(`/patients/${patientId}/caregivers/${caregiver.id}`);
+              markMutation();
               Alert.alert(t('common.success'), t('caregivers.caregiverRemoved'));
               loadCaregivers();
               onCaregiversChange?.();

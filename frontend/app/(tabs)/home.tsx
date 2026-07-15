@@ -15,6 +15,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { MedicationCard } from '../../components/MedicationCard';
 import { NotificationPermissionBanner } from '../../components/NotificationPermissionBanner';
 import api from '../../utils/api';
+import { markMutation, hasMutatedSince } from '../../utils/mutations';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRefreshOnResume } from '../../hooks/useRefreshOnResume';
 import { requestNotificationPermissions, registerPushToken } from '../../utils/notifications';
@@ -83,7 +84,9 @@ export default function Home() {
   useRefreshOnResume(() => loadDashboard(true));
 
   const loadDashboard = async (force = false) => {
-    if (!force && Date.now() - lastLoad.current < 30000) {
+    // El throttle se perdona si hubo una mutación (guardar/eliminar en otra
+    // pantalla) después de la última carga: al volver, refetch inmediato.
+    if (!force && !hasMutatedSince(lastLoad.current) && Date.now() - lastLoad.current < 30000) {
       return;
     }
     lastLoad.current = Date.now();
@@ -182,6 +185,7 @@ export default function Home() {
           taken_datetime: new Date().toISOString(),
         });
       }
+      markMutation();
       // Refrescar en background saltando debounce
       loadDashboard(true);
     } catch (error) {
@@ -229,6 +233,7 @@ export default function Home() {
           status: 'skipped',
         });
       }
+      markMutation();
       // Refrescar en background saltando debounce
       loadDashboard(true);
     } catch (error) {

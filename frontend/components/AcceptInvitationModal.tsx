@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import api from '../utils/api';
+import { markMutation } from '../utils/mutations';
 
 interface AcceptInvitationModalProps {
   visible: boolean;
@@ -50,6 +51,7 @@ export function AcceptInvitationModal({ visible, onClose, onAccepted }: AcceptIn
       const response = await api.post('/caregivers/accept-invitation', {
         code: inviteCode.trim().toUpperCase(),
       });
+      markMutation();
       const patientName = response.data.patient_name;
       Alert.alert(
         t('common.success'),

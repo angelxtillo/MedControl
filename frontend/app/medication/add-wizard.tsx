@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import api from '../../utils/api';
+import { markMutation } from '../../utils/mutations';
 import { formatLongDate, localeForLanguage, startOfToday, toISODate } from '../../utils/dates';
 import { useTranslation } from 'react-i18next';
 
@@ -223,6 +224,7 @@ export default function AddMedicationWizard() {
       // Los recordatorios de dosis los envía el scheduler del backend (push a
       // todos los cuidadores); no se programa nada local.
       await api.post('/medications', medicationData);
+      markMutation();
       Alert.alert(t('common.success'), t('medications.successAdded'), [
         { text: 'OK', onPress: () => router.back() }
       ]);

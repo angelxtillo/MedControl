@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, router } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import api from '../../utils/api';
+import { markMutation } from '../../utils/mutations';
 import { formatLongDate, parseISODate, startOfToday, toISODate } from '../../utils/dates';
 import { useTranslation } from 'react-i18next';
 
@@ -266,6 +267,7 @@ export default function EditMedication() {
         instructions: instructions || null,
         active,
       });
+      markMutation();
       // Los recordatorios de dosis los envía el scheduler del backend; no se
       // programa nada local.
       Alert.alert(t('common.success'), t('medications.medicationUpdated'));
