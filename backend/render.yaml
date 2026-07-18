@@ -17,5 +17,5 @@ services:
       # Remitente de los correos (SendGrid Single Sender verificado).
       # NOTA: debe estar verificado en SendGrid antes de que envie.
       - key: SENDGRID_FROM_EMAIL
-        value: support.dosaria@gmail.com
+        value: soporte@dosaria.org
       # SENDGRID_API_KEY es secreto: se gestiona solo en el dashboard de Render (no en este blueprint).
