@@ -208,7 +208,7 @@ export default function SettingsScreen() {
             icon="mail"
             title={t('settings.contactSupport')}
             subtitle={t('settings.contactSupportDesc')}
-            onPress={() => Linking.openURL('mailto:support.dosaria@gmail.com?subject=Soporte%20Dosaria')}
+            onPress={() => Linking.openURL('mailto:soporte@dosaria.org?subject=Soporte%20Dosaria')}
           />
 
           <MenuItem
