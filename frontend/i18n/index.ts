@@ -17,9 +17,21 @@ const resources = {
   fr: { translation: fr },
 };
 
+export const SUPPORTED_LANGUAGES = ['es', 'en', 'pt', 'fr'];
+export const DEFAULT_LANGUAGE = 'es';
+
+// Idioma del primer arranque: el del sistema si Dosaria lo habla, español si no.
+// Solo decide cuando NO hay preferencia guardada; la elección explícita del
+// usuario (LANGUAGE_KEY) se aplica después y manda siempre.
+// El try/catch cubre el caso en que el módulo nativo no esté disponible: esto
+// corre en el ámbito del módulo, así que una excepción aquí impediría arrancar.
 const getDeviceLanguage = (): string => {
-  const deviceLang = Localization.getLocales()[0]?.languageCode || 'es';
-  return ['es', 'en', 'pt', 'fr'].includes(deviceLang) ? deviceLang : 'es';
+  try {
+    const deviceLang = Localization.getLocales()[0]?.languageCode || DEFAULT_LANGUAGE;
+    return SUPPORTED_LANGUAGES.includes(deviceLang) ? deviceLang : DEFAULT_LANGUAGE;
+  } catch {
+    return DEFAULT_LANGUAGE;
+  }
 };
 
 // Initialize synchronously so t() works from the very first render.
@@ -58,11 +70,19 @@ export const changeLanguage = async (lang: string): Promise<void> => {
 
 export const getCurrentLanguage = (): string => i18n.language;
 
+// Cada idioma con su nombre en sí mismo (endónimo), sin banderas: una bandera no
+// identifica un idioma, y las que había excluían justo al público principal de
+// Dosaria (🇪🇸 para el español de Latinoamérica, 🇧🇷 para el portugués de Portugal).
 export const availableLanguages = [
-  { code: 'es', name: 'Español', flag: '🇪🇸' },
-  { code: 'en', name: 'English', flag: '🇺🇸' },
-  { code: 'pt', name: 'Português', flag: '🇧🇷' },
-  { code: 'fr', name: 'Français', flag: '🇫🇷' },
+  { code: 'es', name: 'Español' },
+  { code: 'en', name: 'English' },
+  { code: 'pt', name: 'Português' },
+  { code: 'fr', name: 'Français' },
 ];
+
+/** Nombre mostrable del idioma; cae al español si el código es desconocido. */
+export const getLanguageName = (code: string): string =>
+  availableLanguages.find((l) => l.code === code)?.name
+  ?? availableLanguages[0].name;
 
 export default i18n;

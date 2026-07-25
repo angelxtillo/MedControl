@@ -20,7 +20,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
-import { changeLanguage, availableLanguages, getCurrentLanguage } from '../../i18n';
+import { getCurrentLanguage, getLanguageName } from '../../i18n';
+import { LanguageSelectorModal } from '../../components/LanguageSelectorModal';
 import { PRIVACY_POLICY_URL, TERMS_URL } from '../../utils/legal';
 import { PASSWORD_MIN_LENGTH, PASSWORD_MAX_LENGTH, passwordErrorKey } from '../../utils/password';
 import { AcceptInvitationModal } from '../../components/AcceptInvitationModal';
@@ -116,17 +117,12 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleChangeLanguage = async (langCode: string) => {
-    await changeLanguage(langCode);
+  // El modal compartido ya persistió el idioma y se cerró solo; aquí únicamente
+  // refrescamos la etiqueta del menú.
+  // Las notificaciones de dosis las envía el servidor (en español por ahora);
+  // ya no hay locales que reprogramar al cambiar de idioma.
+  const handleChangeLanguage = (langCode: string) => {
     setCurrentLang(langCode);
-    setLanguageModalVisible(false);
-    // Las notificaciones de dosis las envía el servidor (en español por ahora);
-    // ya no hay locales que reprogramar al cambiar de idioma.
-  };
-
-  const getCurrentLanguageName = () => {
-    const lang = availableLanguages.find(l => l.code === currentLang);
-    return lang ? `${lang.flag} ${lang.name}` : 'Español';
   };
 
   const openDonationLink = async (platform: string) => {
@@ -222,7 +218,7 @@ export default function SettingsScreen() {
           <MenuItem
             icon="language"
             title={t('settings.language')}
-            subtitle={getCurrentLanguageName()}
+            subtitle={getLanguageName(currentLang)}
             onPress={() => setLanguageModalVisible(true)}
             iconBg="#E8F5E9"
             iconColor="#4CAF50"
@@ -518,51 +514,12 @@ export default function SettingsScreen() {
         </View>
       </Modal>
 
-      {/* Modal Selector de Idioma */}
-      <Modal
+      {/* Selector de Idioma (compartido con la pantalla de login/registro) */}
+      <LanguageSelectorModal
         visible={languageModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setLanguageModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.languageModalContent, { paddingBottom: insets.bottom + 16 }]}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{t('languages.title')}</Text>
-              <TouchableOpacity
-                onPress={() => setLanguageModalVisible(false)}
-                style={styles.closeButton}
-              >
-                <Ionicons name="close" size={24} color="#666" />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.languageList}>
-              {availableLanguages.map((lang) => (
-                <TouchableOpacity
-                  key={lang.code}
-                  style={[
-                    styles.languageItem,
-                    currentLang === lang.code && styles.languageItemActive
-                  ]}
-                  onPress={() => handleChangeLanguage(lang.code)}
-                >
-                  <Text style={styles.languageFlag}>{lang.flag}</Text>
-                  <Text style={[
-                    styles.languageName,
-                    currentLang === lang.code && styles.languageNameActive
-                  ]}>
-                    {lang.name}
-                  </Text>
-                  {currentLang === lang.code && (
-                    <Ionicons name="checkmark-circle" size={24} color="#2196F3" />
-                  )}
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        </View>
-      </Modal>
+        onClose={() => setLanguageModalVisible(false)}
+        onChanged={handleChangeLanguage}
+      />
 
       {/* Aceptar Invitación (flujo compartido con la pantalla de Pacientes) */}
       <AcceptInvitationModal
@@ -1072,41 +1029,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   // Language modal styles
-  languageModalContent: {
-    backgroundColor: 'white',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: '80%',
-    paddingBottom: 16,
-  },
-  languageList: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  languageItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    marginVertical: 4,
-  },
-  languageItemActive: {
-    backgroundColor: '#E3F2FD',
-  },
-  languageFlag: {
-    fontSize: 28,
-    marginRight: 16,
-  },
-  languageName: {
-    fontSize: 16,
-    color: '#212121',
-    flex: 1,
-  },
-  languageNameActive: {
-    color: '#2196F3',
-    fontWeight: '600',
-  },
+  // Los estilos del selector de idioma se fueron con él a
+  // components/LanguageSelectorModal.tsx.
   // Delete account modal styles
   deleteWarningBox: {
     flexDirection: 'row',

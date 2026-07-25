@@ -19,6 +19,8 @@ import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
 import { TermsCheckbox } from '../components/TermsCheckbox';
+import { LanguageSelectorModal } from '../components/LanguageSelectorModal';
+import { getLanguageName } from '../i18n';
 import { getApiErrorMessage } from '../utils/errors';
 import { PASSWORD_MIN_LENGTH, PASSWORD_MAX_LENGTH, passwordErrorKey } from '../utils/password';
 import Animated, {
@@ -77,7 +79,7 @@ function LoadingLogo() {
 }
 
 export default function Index() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const {
     login,
     register,
@@ -110,6 +112,10 @@ export default function Index() {
   const [resetCode, setResetCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
+
+  // Selector de idioma antes de iniciar sesión: sin esto, quien no habla español
+  // no puede leer los Términos que se le pide aceptar al registrarse.
+  const [languageModalVisible, setLanguageModalVisible] = useState(false);
   // Timestamps absolutos (epoch ms): la fuente de verdad del tiempo restante.
   // El tick solo refresca `nowTs` para re-renderizar; el tiempo real se deriva
   // de estos timestamps, así que minimizar la app no "pausa" la cuenta.
@@ -623,6 +629,17 @@ export default function Index() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <View style={styles.langBar}>
+        <TouchableOpacity
+          style={styles.langButton}
+          onPress={() => setLanguageModalVisible(true)}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons name="globe-outline" size={16} color="#2196F3" />
+          <Text style={styles.langButtonText}>{getLanguageName(i18n.language)}</Text>
+        </TouchableOpacity>
+      </View>
+
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
@@ -732,6 +749,11 @@ export default function Index() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <LanguageSelectorModal
+        visible={languageModalVisible}
+        onClose={() => setLanguageModalVisible(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -906,6 +928,26 @@ const styles = StyleSheet.create({
     color: '#2196F3',
     fontSize: 14,
     fontWeight: '500',
+  },
+  langBar: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 20,
+    paddingTop: 8,
+  },
+  langButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    backgroundColor: '#E3F2FD',
+  },
+  langButtonText: {
+    color: '#2196F3',
+    fontSize: 13,
+    fontWeight: '600',
   },
   sessionsNotice: {
     fontSize: 13,
