@@ -52,6 +52,7 @@ def validate_timezone(tz: str) -> str:
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 from bson import ObjectId
+from bson.errors import InvalidId
 from pymongo.errors import DuplicateKeyError
 import time
 from collections import defaultdict
@@ -103,6 +104,15 @@ USER_ACTION_WINDOW = 3600  # 1 hora
 # fija expires_at con esto y además lo expone (code_expires_in_seconds) para que
 # el frontend muestre un contador alineado, sin hardcodear su propio valor.
 EMAIL_CODE_TTL_MINUTES = 10
+
+# Intentos fallidos permitidos al canjear un código de restablecimiento de
+# contraseña antes de exigir uno nuevo (mismo criterio que /auth/verify-email).
+PASSWORD_RESET_MAX_ATTEMPTS = 5
+
+# Detalle del 401 cuando la sesión se invalidó por un cambio de contraseña. El
+# interceptor del frontend cierra la sesión ante cualquier 401, así que este
+# texto es lo único que el usuario llega a ver del motivo.
+SESSION_REVOKED_DETAIL = "Tu contraseña cambió. Inicia sesión de nuevo."
 
 # Versión vigente de los Términos y Condiciones / Política de Privacidad
 # publicados en GitHub Pages. Se guarda por usuario al aceptar; si se publica
@@ -177,6 +187,12 @@ async def lifespan(app: FastAPI):
             logger.warning(f"Could not create unique index on medication_logs: {idx_err}")
         # TTL para verificaciones de email (15 min)
         await db.email_verifications.create_index("expires_at", expireAfterSeconds=0)
+        # Códigos de restablecimiento de contraseña. Colección SEPARADA de
+        # email_verifications a propósito: ambas se indexan por `email` y los
+        # delete_many({"email": ...}) de cada flujo borrarían los códigos del
+        # otro (p. ej. pedir un reset invalidaría una verificación pendiente).
+        await db.password_resets.create_index("expires_at", expireAfterSeconds=0)
+        await db.password_resets.create_index("email")
         # TTL para invitaciones (48 horas)
         await db.invitations.create_index("expires_at", expireAfterSeconds=0)
         # Dispositivos para push: un token es único (un dispositivo); índice por
@@ -335,6 +351,28 @@ class CaregiverLogin(BaseModel):
 
 class DeleteAccountRequest(BaseModel):
     password: str
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    code: str = Field(..., min_length=1, max_length=20)
+    new_password: str
+
+    @field_validator('new_password')
+    @classmethod
+    def password_policy(cls, v):
+        return validate_password(v)
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+    @field_validator('new_password')
+    @classmethod
+    def password_policy(cls, v):
+        return validate_password(v)
 
 class Caregiver(BaseModel):
     id: str
@@ -527,14 +565,74 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def create_access_token(data: dict):
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + timedelta(days=30)
-    to_encode.update({"exp": expire})
+    now = datetime.now(timezone.utc)
+    expire = now + timedelta(days=30)
+    # `iat` permite revocar sesiones emitidas antes del último cambio de
+    # contraseña (ver ensure_token_not_revoked). python-jose serializa exp/iat
+    # con timegm(), que descarta los microsegundos.
+    to_encode.update({"exp": expire, "iat": now})
     encoded_jwt = jwt.encode(to_encode, JWT_SECRET, algorithm=ALGORITHM)
     return encoded_jwt
+
+def password_change_stamp() -> datetime:
+    """Momento del cambio de contraseña, truncado al segundo.
+
+    El `iat` de un JWT son segundos enteros, así que guardar microsegundos haría
+    que el token emitido en el MISMO segundo del cambio (el que devolvemos al
+    dispositivo que acaba de cambiar la contraseña) pareciera anterior al cambio
+    y se invalidara a sí mismo."""
+    return utc_now_naive().replace(microsecond=0)
 
 def normalize_email(email: str) -> str:
     """Normalizar email: strip + lowercase"""
     return email.strip().lower()
+
+async def ensure_token_not_revoked(user_id: str, issued_at_ts) -> None:
+    """Rechaza los tokens emitidos ANTES del último cambio de contraseña.
+
+    Los JWT son autocontenidos: sin esta comprobación, cambiar la contraseña no
+    echaría a nadie: quien tuviera una sesión abierta (el escenario típico que
+    motiva un restablecimiento, alguien que entró a la cuenta) seguiría dentro
+    hasta que su token expirara solo, 30 días después.
+
+    Coste: una lectura indexada por _id en cada request autenticado. Es
+    inevitable —la validez pasa a depender de estado del servidor, no solo de
+    la firma— y se limita al campo password_changed_at."""
+    try:
+        oid = ObjectId(user_id)
+    except (InvalidId, TypeError):
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    user = await db.caregivers.find_one({"_id": oid}, {"password_changed_at": 1})
+    # Sin usuario, el endpoint responde su propio 404 ("Cuidador no encontrado")
+    # como hasta ahora. Sin password_changed_at, la contraseña nunca cambió.
+    changed_at = ensure_naive(user.get("password_changed_at")) if user else None
+    if not changed_at:
+        return
+
+    if not isinstance(issued_at_ts, (int, float)):
+        # Token sin `iat` (emitido antes de que existiera este mecanismo) o con
+        # un `iat` corrupto: por definición es anterior al cambio.
+        raise HTTPException(status_code=401, detail=SESSION_REVOKED_DETAIL)
+
+    issued_at = datetime.fromtimestamp(issued_at_ts, tz=timezone.utc).replace(tzinfo=None)
+    if issued_at < changed_at:
+        raise HTTPException(status_code=401, detail=SESSION_REVOKED_DETAIL)
+
+async def revoke_user_devices(user_id: str) -> None:
+    """Da de baja los push tokens de la cuenta tras un cambio de contraseña.
+
+    El push NO pasa por get_current_user, así que invalidar la sesión no basta:
+    el dispositivo expulsado seguiría recibiendo los recordatorios de dosis, que
+    llevan nombre del paciente y del medicamento. El dispositivo legítimo se
+    vuelve a registrar solo: la app llama a registerPushToken() tras un cambio o
+    restablecimiento exitoso, igual que hace tras el login."""
+    result = await db.devices.delete_many({"user_id": user_id})
+    if result.deleted_count:
+        logging.info(
+            f"[password] {result.deleted_count} dispositivo(s) dados de baja para "
+            f"user={user_id} por cambio de contraseña"
+        )
 
 async def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)):
     if credentials is None:
@@ -542,12 +640,15 @@ async def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] =
     try:
         token = credentials.credentials
         payload = jwt.decode(token, JWT_SECRET, algorithms=[ALGORITHM])
-        user_id: str = payload.get("sub")
-        if user_id is None:
-            raise HTTPException(status_code=401, detail="Invalid token")
-        return user_id
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
+
+    user_id: str = payload.get("sub")
+    if user_id is None:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    await ensure_token_not_revoked(user_id, payload.get("iat"))
+    return user_id
 
 # ============= SCHEDULING HELPERS =============
 WEEKDAY_MAP = {
@@ -677,6 +778,70 @@ async def send_verification_email(to_email: str, code: str) -> bool:
     except Exception as e:
         logging.error(
             f"[send_verification_email] EXCEPCIÓN enviando a {to_email}: {e}",
+            exc_info=True,
+        )
+        return False
+
+async def send_password_reset_email(to_email: str, code: str) -> bool:
+    """Enviar código para restablecer la contraseña.
+
+    Plantilla propia en vez de reutilizar send_verification_email: ese correo
+    habla de "verifica tu correo" y "gracias por registrarte", que en un
+    restablecimiento desorienta y hace más difícil detectar un intento ajeno."""
+    try:
+        logging.info(
+            f"[send_password_reset_email] Iniciando envío a {to_email} "
+            f"(from={SENDGRID_FROM_EMAIL!r}, api_key_set={bool(SENDGRID_API_KEY)})"
+        )
+        sg = sendgrid.SendGridAPIClient(api_key=SENDGRID_API_KEY)
+        html_content = f"""
+        <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px;">
+          <div style="background: #2196F3; padding: 20px; border-radius: 12px 12px 0 0; text-align: center;">
+            <h1 style="color: white; margin: 0;">&#128138; Dosaria</h1>
+          </div>
+          <div style="background: #f9f9f9; padding: 24px; border-radius: 0 0 12px 12px;">
+            <h2 style="color: #212121;">Restablece tu contraseña</h2>
+            <p style="color: #666;">
+              Recibimos una solicitud para restablecer la contraseña de tu cuenta
+              de Dosaria. Ingresa el siguiente código en la aplicación:
+            </p>
+            <div style="background: #E3F2FD; border: 2px dashed #2196F3; border-radius: 12px; padding: 20px; text-align: center; margin: 20px 0;">
+              <p style="color: #666; margin: 0 0 8px 0; font-size: 14px;">Tu código de restablecimiento</p>
+              <h1 style="color: #1565C0; margin: 0; font-size: 36px; letter-spacing: 8px;">{code}</h1>
+            </div>
+            <p style="color: #999; font-size: 12px; text-align: center;">Este código expira en {EMAIL_CODE_TTL_MINUTES} minutos.</p>
+            <p style="color: #666; font-size: 13px;">
+              Al restablecer tu contraseña se cerrarán las sesiones abiertas en
+              tus otros dispositivos.
+            </p>
+            <p style="color: #999; font-size: 12px; text-align: center;">
+              Si no solicitaste este cambio, puedes ignorar este email: tu
+              contraseña actual sigue siendo válida.
+            </p>
+          </div>
+        </div>
+        """
+        message = Mail(
+            from_email=SENDGRID_FROM_EMAIL,
+            to_emails=to_email,
+            subject="Dosaria: Restablece tu contraseña",
+            html_content=html_content
+        )
+        response = sg.send(message)
+        ok = response.status_code in [200, 202]
+        if ok:
+            logging.info(
+                f"[send_password_reset_email] SendGrid OK status={response.status_code} para {to_email}"
+            )
+        else:
+            logging.error(
+                f"[send_password_reset_email] SendGrid respuesta NO-OK status={response.status_code} "
+                f"para {to_email} body={getattr(response, 'body', None)!r}"
+            )
+        return ok
+    except Exception as e:
+        logging.error(
+            f"[send_password_reset_email] EXCEPCIÓN enviando a {to_email}: {e}",
             exc_info=True,
         )
         return False
@@ -894,6 +1059,191 @@ async def login(credentials: CaregiverLogin, request: Request):
         )
 
     token = create_access_token({"sub": str(user["_id"])})
+
+    return {
+        "token": token,
+        "user": public_user(user),
+    }
+
+# ============= PASSWORD RESET / CHANGE =============
+# Mensaje único de /auth/forgot-password. Deliberadamente condicional ("si el
+# correo corresponde a una cuenta"): es el mismo texto para un correo registrado
+# y para uno que no lo está.
+FORGOT_PASSWORD_MESSAGE = (
+    "Si el correo corresponde a una cuenta de Dosaria, te enviamos un código "
+    "para restablecer tu contraseña. Revisa tu bandeja de entrada."
+)
+
+@api_router.post("/auth/forgot-password")
+async def forgot_password(data: ForgotPasswordRequest, request: Request):
+    """Emite un código de un solo uso para restablecer la contraseña.
+
+    RESPUESTA UNIFORME: siempre 200 con el mismo cuerpo, exista o no la cuenta.
+    Cualquier diferencia (404, un 429 distinto, otro mensaje) convertiría el
+    endpoint en un oráculo para enumerar qué correos están registrados en
+    Dosaria —dato sensible, porque la app es de salud—, igual que se evita en el
+    flujo de invitaciones. El único filtro visible es el rate limit por IP, que
+    se aplica antes de saber si la cuenta existe."""
+    ip = get_client_ip(request)
+    retry_after = check_auth_rate_limit(ip)
+    if retry_after:
+        raise HTTPException(
+            status_code=429,
+            detail=rate_limit_message(retry_after),
+            headers={"Retry-After": str(retry_after)},
+        )
+
+    email = normalize_email(data.email)
+    uniform_response = {
+        "message": FORGOT_PASSWORD_MESSAGE,
+        "code_expires_in_seconds": EMAIL_CODE_TTL_MINUTES * 60,
+    }
+
+    user = await db.caregivers.find_one({"email": email})
+    if not user:
+        logging.info(f"[forgot_password] Sin cuenta para {email}; respuesta uniforme.")
+        return uniform_response
+
+    # Anti-spam de reenvío: el mismo minuto de gracia que /auth/resend-verification
+    # pero SILENCIOSO. Devolver 429 solo cuando la cuenta existe reintroduciría
+    # justo el oráculo que el resto del endpoint evita.
+    last_reset = await db.password_resets.find_one(
+        {"email": email},
+        sort=[("created_at", -1)]
+    )
+    if last_reset and utc_now_naive() - ensure_naive(last_reset["created_at"]) < timedelta(minutes=1):
+        logging.info(
+            f"[forgot_password] Código reciente para {email}; no se reenvía "
+            "(anti-spam silencioso)."
+        )
+        return uniform_response
+
+    # Un código vigente por cuenta: el anterior deja de servir.
+    await db.password_resets.delete_many({"email": email})
+
+    code = generate_invitation_code()
+    await db.password_resets.insert_one({
+        "email": email,
+        "code": code,
+        "attempts": 0,
+        "created_at": utc_now_naive(),
+        "expires_at": utc_now_naive() + timedelta(minutes=EMAIL_CODE_TTL_MINUTES)
+    })
+
+    sent = await send_password_reset_email(email, code)
+    if sent:
+        logging.info(f"[forgot_password] Email de restablecimiento ENVIADO a {email}")
+    else:
+        # No se propaga como 500: un fallo de envío solo puede ocurrir cuando la
+        # cuenta existe, así que delataría su existencia. Queda en logs.
+        logging.error(f"[forgot_password] FALLO al enviar email de restablecimiento a {email}")
+
+    return uniform_response
+
+@api_router.post("/auth/reset-password")
+async def reset_password(data: ResetPasswordRequest, request: Request):
+    """Canjea el código de /auth/forgot-password por una contraseña nueva.
+
+    Devuelve token y usuario, como /auth/verify-email: el dispositivo que
+    restablece queda dentro. Los demás quedan fuera (password_changed_at)."""
+    ip = get_client_ip(request)
+    retry_after = check_auth_rate_limit(ip)
+    if retry_after:
+        raise HTTPException(
+            status_code=429,
+            detail=rate_limit_message(retry_after),
+            headers={"Retry-After": str(retry_after)},
+        )
+
+    email = normalize_email(data.email)
+    code = data.code.strip().upper()
+
+    reset = await db.password_resets.find_one({"email": email, "code": code})
+
+    if not reset:
+        # Contar el fallo sobre el código vigente de ese correo (si lo hay) para
+        # que 5 intentos a ciegas obliguen a pedir uno nuevo.
+        await db.password_resets.update_one(
+            {"email": email},
+            {"$inc": {"attempts": 1}}
+        )
+        current = await db.password_resets.find_one({"email": email})
+        if current and current.get("attempts", 0) >= PASSWORD_RESET_MAX_ATTEMPTS:
+            raise HTTPException(status_code=429, detail="Demasiados intentos fallidos. Solicita un nuevo código.")
+        raise HTTPException(status_code=400, detail="Código inválido")
+
+    if ensure_naive(reset["expires_at"]) < utc_now_naive():
+        raise HTTPException(status_code=400, detail="El código ha expirado. Solicita uno nuevo.")
+
+    if reset.get("attempts", 0) >= PASSWORD_RESET_MAX_ATTEMPTS:
+        raise HTTPException(status_code=429, detail="Demasiados intentos fallidos. Solicita un nuevo código.")
+
+    user = await db.caregivers.find_one({"email": email})
+    if not user:
+        # La cuenta se eliminó entre la solicitud y el canje. No hay filtración:
+        # llegar aquí exige un código válido, que solo se emite a cuentas reales.
+        await db.password_resets.delete_many({"email": email})
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    await db.caregivers.update_one(
+        {"_id": user["_id"]},
+        {"$set": {
+            "password_hash": hash_password(data.new_password),
+            "password_changed_at": password_change_stamp(),
+            # Canjear el código demuestra control del buzón, exactamente lo que
+            # demuestra /auth/verify-email. Sin esto, una cuenta que nunca
+            # verificó su correo restablecería la contraseña y seguiría chocando
+            # con el 403 "Email no verificado" del login.
+            "email_verified": True,
+        }},
+    )
+
+    await db.password_resets.delete_many({"email": email})
+    await revoke_user_devices(str(user["_id"]))
+
+    user = await db.caregivers.find_one({"_id": user["_id"]})
+    token = create_access_token({"sub": str(user["_id"])})
+
+    logging.info(f"[reset_password] Contraseña restablecida para {email}")
+
+    return {
+        "token": token,
+        "user": public_user(user),
+    }
+
+@api_router.post("/auth/change-password")
+async def change_password(
+    data: ChangePasswordRequest,
+    user_id: str = Depends(get_current_user)
+):
+    """Cambio de contraseña con sesión abierta. Devuelve un token nuevo: el
+    anterior queda invalidado por password_changed_at, incluido el de este
+    dispositivo, así que la app DEBE guardar el que se devuelve aquí."""
+    user = await db.caregivers.find_one({"_id": ObjectId(user_id)})
+    if not user:
+        raise HTTPException(status_code=404, detail="Cuidador no encontrado")
+
+    if not verify_password(data.current_password, user["password_hash"]):
+        # 400 y no 401 (como sí usa DELETE /auth/me): el 401 ahora también
+        # significa "sesión invalidada" y el interceptor del frontend cierra la
+        # sesión ante cualquier 401. Un tecleo mal escrito en la contraseña
+        # actual no debe expulsar al usuario de la app.
+        raise HTTPException(status_code=400, detail="La contraseña actual no es correcta")
+
+    await db.caregivers.update_one(
+        {"_id": ObjectId(user_id)},
+        {"$set": {
+            "password_hash": hash_password(data.new_password),
+            "password_changed_at": password_change_stamp(),
+        }},
+    )
+
+    await revoke_user_devices(user_id)
+
+    user = await db.caregivers.find_one({"_id": ObjectId(user_id)})
+    token = create_access_token({"sub": user_id})
+
+    logging.info(f"[change_password] Contraseña cambiada para user={user_id}")
 
     return {
         "token": token,
