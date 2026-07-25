@@ -59,7 +59,20 @@
     "codeSent": "Código enviado. Revisa tu correo.",
     "codeExpiresIn": "El código expira en {{time}}",
     "codeExpiredResend": "El código expiró. Solicita uno nuevo.",
-    "backToLogin": "← Volver al inicio de sesión"
+    "backToLogin": "← Volver al inicio de sesión",
+    "forgotPassword": "¿Olvidaste tu contraseña?",
+    "forgotTitle": "Recuperar contraseña",
+    "forgotSubtitle": "Te enviamos un código por correo",
+    "forgotInfo": "Escribe el correo de tu cuenta y te enviaremos un código para crear una contraseña nueva.",
+    "forgotSent": "Si el correo corresponde a una cuenta de Dosaria, te enviamos un código. Revisa tu bandeja de entrada y la carpeta de spam.",
+    "sendCode": "Enviar código",
+    "resetTitle": "Nueva contraseña",
+    "resetSubtitle": "Ingresa el código y tu contraseña nueva",
+    "resetInfo": "Enviamos un código de 6 caracteres a {{email}}. Si no lo ves, revisa tu carpeta de spam.",
+    "newPassword": "Nueva contraseña",
+    "resetButton": "Restablecer contraseña",
+    "resetSessionsNotice": "Por seguridad, al restablecer tu contraseña se cerrarán las sesiones abiertas en tus otros dispositivos.",
+    "resetSuccess": "Tu contraseña se actualizó. Se cerraron las sesiones en tus otros dispositivos."
   },
   "legal": {
     "acceptPrefix": "He leído y acepto los ",
@@ -418,7 +431,20 @@
       "confirm": "Eliminar mi cuenta",
       "errorDelete": "No se pudo eliminar la cuenta"
     },
-    "deleteAccountDesc": "Borra tu cuenta y todos tus datos"
+    "deleteAccountDesc": "Borra tu cuenta y todos tus datos",
+    "changePassword": {
+      "title": "Cambiar contraseña",
+      "desc": "Actualiza la contraseña de tu cuenta",
+      "currentLabel": "Contraseña actual",
+      "newLabel": "Nueva contraseña",
+      "confirmLabel": "Confirma la nueva contraseña",
+      "fillAll": "Completa los tres campos",
+      "mismatch": "La nueva contraseña y su confirmación no coinciden",
+      "notice": "Por seguridad, al cambiar tu contraseña se cerrarán las sesiones abiertas en tus otros dispositivos. Tendrás que iniciar sesión de nuevo en ellos.",
+      "confirm": "Cambiar contraseña",
+      "success": "Contraseña actualizada. Tendrás que iniciar sesión de nuevo en tus otros dispositivos.",
+      "error": "No se pudo cambiar la contraseña"
+    }
   },
   "about": {
     "title": "Sobre Dosaria",

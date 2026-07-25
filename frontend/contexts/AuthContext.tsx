@@ -35,6 +35,9 @@ interface AuthContextType {
   register: (name: string, email: string, password: string, acceptedTerms: boolean) => Promise<RegisterResult>;
   verifyEmail: (email: string, code: string) => Promise<void>;
   resendVerification: (email: string) => Promise<number | undefined>;
+  forgotPassword: (email: string) => Promise<number | undefined>;
+  resetPassword: (email: string, code: string, newPassword: string) => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   acceptTerms: () => Promise<void>;
   logout: () => Promise<void>;
   deleteAccount: (password: string) => Promise<void>;
@@ -192,6 +195,63 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const forgotPassword = async (email: string): Promise<number | undefined> => {
+    try {
+      const response = await axios.post(`${API_URL}/api/auth/forgot-password`, {
+        email: email.trim().toLowerCase(),
+      }, { timeout: 60000 });
+      // El backend responde igual exista o no la cuenta (a propósito: no revela
+      // qué correos están registrados), así que aquí no hay nada que ramificar.
+      return response.data?.code_expires_in_seconds;
+    } catch (error: any) {
+      throw new Error(getApiErrorMessage(error, 'No se pudo enviar el código'));
+    }
+  };
+
+  const resetPassword = async (email: string, code: string, newPassword: string) => {
+    try {
+      const response = await axios.post(`${API_URL}/api/auth/reset-password`, {
+        email: email.trim().toLowerCase(),
+        code: code.trim().toUpperCase(),
+        new_password: newPassword,
+      }, { timeout: 60000 });
+      // Igual que verify-email: el restablecimiento deja la sesión abierta en
+      // ESTE dispositivo (las de los demás quedan invalidadas en el backend).
+      const { token: newToken, user: newUser } = response.data;
+      await AsyncStorage.setItem('token', newToken);
+      await AsyncStorage.setItem('user', JSON.stringify(newUser));
+      setToken(newToken);
+      setUser(newUser);
+      registerPushToken().catch(() => {});
+    } catch (error: any) {
+      throw new Error(getApiErrorMessage(error, 'No se pudo restablecer la contraseña'));
+    }
+  };
+
+  const changePassword = async (currentPassword: string, newPassword: string) => {
+    const currentToken = token || (await AsyncStorage.getItem('token'));
+    try {
+      const response = await axios.post(
+        `${API_URL}/api/auth/change-password`,
+        { current_password: currentPassword, new_password: newPassword },
+        { headers: { Authorization: `Bearer ${currentToken}` }, timeout: 60000 },
+      );
+      // OBLIGATORIO guardar el token devuelto: el backend invalida todos los
+      // anteriores al cambio, incluido el de este dispositivo. Sin esto, la
+      // siguiente petición autenticada saldría 401 y cerraría la sesión.
+      const { token: newToken, user: newUser } = response.data;
+      await AsyncStorage.setItem('token', newToken);
+      await AsyncStorage.setItem('user', JSON.stringify(newUser));
+      setToken(newToken);
+      setUser(newUser);
+      // El backend dio de baja los push tokens de la cuenta (incluido el de este
+      // dispositivo) para expulsar a los demás; re-registramos el nuestro.
+      registerPushToken().catch(() => {});
+    } catch (error: any) {
+      throw new Error(getApiErrorMessage(error, 'No se pudo cambiar la contraseña'));
+    }
+  };
+
   const acceptTerms = async () => {
     // Usuario existente que acepta desde el gate. Persiste en backend y
     // actualiza el user en memoria y almacenamiento para que el gate desaparezca.
@@ -255,7 +315,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, login, register, verifyEmail, resendVerification, acceptTerms, logout, deleteAccount, loading }}>
+    <AuthContext.Provider value={{ user, token, login, register, verifyEmail, resendVerification, forgotPassword, resetPassword, changePassword, acceptTerms, logout, deleteAccount, loading }}>
       {children}
     </AuthContext.Provider>
   );

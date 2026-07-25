@@ -22,11 +22,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
 import { changeLanguage, availableLanguages, getCurrentLanguage } from '../../i18n';
 import { PRIVACY_POLICY_URL, TERMS_URL } from '../../utils/legal';
+import { PASSWORD_MIN_LENGTH, PASSWORD_MAX_LENGTH, passwordErrorKey } from '../../utils/password';
 import { AcceptInvitationModal } from '../../components/AcceptInvitationModal';
 
 export default function SettingsScreen() {
   const { t } = useTranslation();
-  const { logout, user, deleteAccount } = useAuth();
+  const { logout, user, deleteAccount, changePassword } = useAuth();
   const insets = useSafeAreaInsets();
   const [aboutModalVisible, setAboutModalVisible] = useState(false);
   const [donateModalVisible, setDonateModalVisible] = useState(false);
@@ -36,6 +37,11 @@ export default function SettingsScreen() {
   const [deletePassword, setDeletePassword] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [invitationModalVisible, setInvitationModalVisible] = useState(false);
+  const [passwordModalVisible, setPasswordModalVisible] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [changingPassword, setChangingPassword] = useState(false);
 
   const handleLogout = () => {
     Alert.alert(
@@ -66,6 +72,47 @@ export default function SettingsScreen() {
       setDeleting(false);
       setDeletePassword('');
       setDeleteModalVisible(false);
+    }
+  };
+
+  const closePasswordModal = () => {
+    setPasswordModalVisible(false);
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+  };
+
+  const handleConfirmChangePassword = async () => {
+    if (!currentPassword.trim() || !newPassword.trim() || !confirmPassword.trim()) {
+      Alert.alert(t('common.error'), t('settings.changePassword.fillAll'));
+      return;
+    }
+
+    const pwdErrorKey = passwordErrorKey(newPassword);
+    if (pwdErrorKey) {
+      Alert.alert(t('common.error'), t(pwdErrorKey, {
+        min: PASSWORD_MIN_LENGTH,
+        max: PASSWORD_MAX_LENGTH,
+      }));
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      Alert.alert(t('common.error'), t('settings.changePassword.mismatch'));
+      return;
+    }
+
+    setChangingPassword(true);
+    try {
+      await changePassword(currentPassword, newPassword);
+      closePasswordModal();
+      Alert.alert(t('common.success'), t('settings.changePassword.success'));
+    } catch (error: any) {
+      // Se mantiene el modal abierto: el error típico es la contraseña actual
+      // mal escrita, y así se corrige sin volver a abrirlo ni reescribir todo.
+      Alert.alert(t('common.error'), error.message || t('settings.changePassword.error'));
+    } finally {
+      setChangingPassword(false);
     }
   };
 
@@ -241,6 +288,14 @@ export default function SettingsScreen() {
             iconColor="#2196F3"
           />
 
+          <MenuItem
+            icon="key"
+            title={t('settings.changePassword.title')}
+            subtitle={t('settings.changePassword.desc')}
+            onPress={() => setPasswordModalVisible(true)}
+            iconBg="#FFF3E0"
+            iconColor="#FB8C00"
+          />
 
           <MenuItem
             icon="log-out"
@@ -579,6 +634,91 @@ export default function SettingsScreen() {
                 style={styles.deleteCancelButton}
                 onPress={() => { setDeleteModalVisible(false); setDeletePassword(''); }}
               >
+                <Text style={styles.deleteCancelButtonText}>{t('common.cancel')}</Text>
+              </TouchableOpacity>
+
+              <View style={styles.modalFooterSpace} />
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Modal Cambiar Contraseña */}
+      <Modal
+        visible={passwordModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={closePasswordModal}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
+          <View style={[styles.modalContent, { paddingBottom: insets.bottom + 16 }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{t('settings.changePassword.title')}</Text>
+              <TouchableOpacity onPress={closePasswordModal} style={styles.closeButton}>
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              <Text style={styles.passwordFieldLabel}>{t('settings.changePassword.currentLabel')}</Text>
+              <TextInput
+                style={styles.passwordFieldInput}
+                placeholder={t('settings.changePassword.currentLabel')}
+                secureTextEntry
+                value={currentPassword}
+                onChangeText={setCurrentPassword}
+                placeholderTextColor="#999"
+                autoCapitalize="none"
+              />
+
+              <Text style={styles.passwordFieldLabel}>{t('settings.changePassword.newLabel')}</Text>
+              <TextInput
+                style={styles.passwordFieldInput}
+                placeholder={t('settings.changePassword.newLabel')}
+                secureTextEntry
+                value={newPassword}
+                onChangeText={setNewPassword}
+                placeholderTextColor="#999"
+                autoCapitalize="none"
+              />
+              <Text style={styles.passwordFieldHint}>{t('auth.passwordHint')}</Text>
+
+              <Text style={styles.passwordFieldLabel}>{t('settings.changePassword.confirmLabel')}</Text>
+              <TextInput
+                style={styles.passwordFieldInput}
+                placeholder={t('settings.changePassword.confirmLabel')}
+                secureTextEntry
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                placeholderTextColor="#999"
+                autoCapitalize="none"
+              />
+
+              <View style={styles.passwordNoticeBox}>
+                <Ionicons name="information-circle" size={20} color="#FB8C00" />
+                <Text style={styles.passwordNoticeText}>
+                  {t('settings.changePassword.notice')}
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={styles.passwordConfirmButton}
+                onPress={handleConfirmChangePassword}
+                disabled={changingPassword}
+              >
+                {changingPassword ? (
+                  <ActivityIndicator color="white" />
+                ) : (
+                  <Text style={styles.passwordConfirmButtonText}>
+                    {t('settings.changePassword.confirm')}
+                  </Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.deleteCancelButton} onPress={closePasswordModal}>
                 <Text style={styles.deleteCancelButtonText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
 
@@ -1029,5 +1169,55 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
     color: '#666',
+  },
+  // Change password modal styles
+  passwordFieldLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#212121',
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  passwordFieldInput: {
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: '#212121',
+  },
+  passwordFieldHint: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 6,
+  },
+  passwordNoticeBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#FFF3E0',
+    padding: 14,
+    borderRadius: 12,
+    marginTop: 20,
+    marginBottom: 20,
+    gap: 10,
+  },
+  passwordNoticeText: {
+    fontSize: 13,
+    color: '#5D4037',
+    lineHeight: 19,
+    flex: 1,
+  },
+  passwordConfirmButton: {
+    backgroundColor: '#2196F3',
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  passwordConfirmButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: 'white',
   },
 });

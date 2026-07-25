@@ -59,7 +59,20 @@
     "codeSent": "Code envoyé. Vérifiez votre e-mail.",
     "codeExpiresIn": "Le code expire dans {{time}}",
     "codeExpiredResend": "Le code a expiré. Demandez-en un nouveau.",
-    "backToLogin": "← Retour à la connexion"
+    "backToLogin": "← Retour à la connexion",
+    "forgotPassword": "Mot de passe oublié ?",
+    "forgotTitle": "Réinitialiser le mot de passe",
+    "forgotSubtitle": "Nous vous envoyons un code par e-mail",
+    "forgotInfo": "Saisissez l'e-mail de votre compte et nous vous enverrons un code pour créer un nouveau mot de passe.",
+    "forgotSent": "Si l'e-mail correspond à un compte Dosaria, nous avons envoyé un code. Consultez votre boîte de réception et vos spams.",
+    "sendCode": "Envoyer le code",
+    "resetTitle": "Nouveau mot de passe",
+    "resetSubtitle": "Saisissez le code et votre nouveau mot de passe",
+    "resetInfo": "Nous avons envoyé un code de 6 caractères à {{email}}. Si vous ne le voyez pas, vérifiez vos spams.",
+    "newPassword": "Nouveau mot de passe",
+    "resetButton": "Réinitialiser le mot de passe",
+    "resetSessionsNotice": "Par sécurité, la réinitialisation de votre mot de passe déconnecte vos autres appareils.",
+    "resetSuccess": "Votre mot de passe a été mis à jour. Les sessions sur vos autres appareils ont été fermées."
   },
   "legal": {
     "acceptPrefix": "J'ai lu et j'accepte les ",
@@ -418,7 +431,20 @@
       "confirm": "Supprimer mon compte",
       "errorDelete": "Impossible de supprimer le compte"
     },
-    "deleteAccountDesc": "Supprimez votre compte et toutes vos données"
+    "deleteAccountDesc": "Supprimez votre compte et toutes vos données",
+    "changePassword": {
+      "title": "Changer le mot de passe",
+      "desc": "Mettez à jour le mot de passe de votre compte",
+      "currentLabel": "Mot de passe actuel",
+      "newLabel": "Nouveau mot de passe",
+      "confirmLabel": "Confirmez le nouveau mot de passe",
+      "fillAll": "Remplissez les trois champs",
+      "mismatch": "Le nouveau mot de passe et sa confirmation ne correspondent pas",
+      "notice": "Par sécurité, changer votre mot de passe déconnecte vos autres appareils. Vous devrez vous reconnecter sur ceux-ci.",
+      "confirm": "Changer le mot de passe",
+      "success": "Mot de passe mis à jour. Vous devrez vous reconnecter sur vos autres appareils.",
+      "error": "Impossible de changer le mot de passe"
+    }
   },
   "about": {
     "title": "À propos de Dosaria",

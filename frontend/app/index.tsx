@@ -20,6 +20,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
 import { TermsCheckbox } from '../components/TermsCheckbox';
 import { getApiErrorMessage } from '../utils/errors';
+import { PASSWORD_MIN_LENGTH, PASSWORD_MAX_LENGTH, passwordErrorKey } from '../utils/password';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -31,21 +32,6 @@ import Animated, {
 
 const ONBOARDING_KEY = '@medcontrol_onboarding_complete';
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-// Espejo de validate_password() del backend (server.py). El backend sigue siendo
-// la autoridad; validar aquí evita el viaje de ida y vuelta y, sobre todo, permite
-// decir en el idioma del usuario QUÉ requisito falló: los mensajes del backend
-// solo existen en español.
-const PASSWORD_MIN_LENGTH = 8;
-const PASSWORD_MAX_LENGTH = 72;
-
-const passwordErrorKey = (pwd: string): string | null => {
-  if (pwd.length < PASSWORD_MIN_LENGTH) return 'auth.passwordTooShort';
-  if (pwd.length > PASSWORD_MAX_LENGTH) return 'auth.passwordTooLong';
-  if (!/[a-zA-Z]/.test(pwd)) return 'auth.passwordNeedsLetter';
-  if (!/[0-9]/.test(pwd)) return 'auth.passwordNeedsNumber';
-  return null;
-};
 
 // El botón "Reenviar" se rehabilita 60s después de cada envío.
 const RESEND_COOLDOWN_MS = 60 * 1000;
@@ -92,7 +78,16 @@ function LoadingLogo() {
 
 export default function Index() {
   const { t } = useTranslation();
-  const { login, register, verifyEmail, resendVerification, user, loading: authLoading } = useAuth();
+  const {
+    login,
+    register,
+    verifyEmail,
+    resendVerification,
+    forgotPassword,
+    resetPassword,
+    user,
+    loading: authLoading,
+  } = useAuth();
   const [isLogin, setIsLogin] = useState(true);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -106,6 +101,15 @@ export default function Index() {
   const [showVerification, setShowVerification] = useState(false);
   const [verificationEmail, setVerificationEmail] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
+
+  // Recuperación de contraseña: dos pasos (pedir el código / canjearlo). Los
+  // flags son excluyentes entre sí y con showVerification.
+  const [showForgot, setShowForgot] = useState(false);
+  const [showReset, setShowReset] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetCode, setResetCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
   // Timestamps absolutos (epoch ms): la fuente de verdad del tiempo restante.
   // El tick solo refresca `nowTs` para re-renderizar; el tiempo real se deriva
   // de estos timestamps, así que minimizar la app no "pausa" la cuenta.
@@ -143,7 +147,7 @@ export default function Index() {
   // segundo y, sobre todo, al volver de segundo plano (AppState 'active'), para
   // recalcular el tiempo restante REAL inmediatamente al regresar de Gmail.
   useEffect(() => {
-    if (!showVerification) return;
+    if (!showVerification && !showReset) return;
     const update = () => setNowTs(Date.now());
     update();
     tickRef.current = setInterval(update, 1000);
@@ -154,7 +158,7 @@ export default function Index() {
       if (tickRef.current) clearInterval(tickRef.current);
       sub.remove();
     };
-  }, [showVerification]);
+  }, [showVerification, showReset]);
 
   // Llamar cada vez que el backend emite un código nuevo (registro o reenvío):
   // arma el cooldown del botón y el contador de expiración real, usando la
@@ -273,6 +277,81 @@ export default function Index() {
     }
   };
 
+  const goToForgot = () => {
+    // El correo ya escrito en el login se arrastra para no teclearlo otra vez.
+    setResetEmail(email.trim().toLowerCase());
+    setResetCode('');
+    setNewPassword('');
+    setShowForgot(true);
+  };
+
+  const backToLogin = () => {
+    setShowForgot(false);
+    setShowReset(false);
+    setResetCode('');
+    setNewPassword('');
+  };
+
+  // Envía (o reenvía) el código de restablecimiento. `resend` solo cambia el
+  // aviso que se muestra, porque el endpoint es el mismo.
+  const requestResetCode = async (targetEmail: string, resend = false) => {
+    if (!validateEmail(targetEmail)) {
+      Alert.alert(t('common.error'), t('auth.invalidEmail'));
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const expiresInSeconds = await forgotPassword(targetEmail);
+      setResetEmail(targetEmail);
+      setShowForgot(false);
+      setShowReset(true);
+      onCodeIssued(expiresInSeconds);
+      // Aviso deliberadamente condicional ("si el correo tiene cuenta"): el
+      // backend responde igual exista o no, y la app no debe delatar la
+      // diferencia con un mensaje distinto.
+      Alert.alert(
+        t('common.success'),
+        resend ? t('auth.codeSent') : t('auth.forgotSent'),
+      );
+    } catch (error: any) {
+      Alert.alert(t('common.error'), getApiErrorMessage(error, t('common.errorGeneric')));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!resetCode || resetCode.length !== 6) {
+      Alert.alert(t('common.error'), t('auth.invalidCode'));
+      return;
+    }
+
+    const pwdErrorKey = passwordErrorKey(newPassword);
+    if (pwdErrorKey) {
+      Alert.alert(t('common.error'), t(pwdErrorKey, {
+        min: PASSWORD_MIN_LENGTH,
+        max: PASSWORD_MAX_LENGTH,
+      }));
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await resetPassword(resetEmail, resetCode, newPassword);
+      setShowReset(false);
+      setResetCode('');
+      setNewPassword('');
+      // El backend devolvió sesión nueva: se entra directo, como al verificar.
+      Alert.alert(t('common.success'), t('auth.resetSuccess'));
+      router.replace('/(tabs)/home');
+    } catch (error: any) {
+      Alert.alert(t('common.error'), getApiErrorMessage(error, t('common.errorGeneric')));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Mostrar loading mientras verifica onboarding
   if (checkingOnboarding || authLoading) {
     return (
@@ -281,6 +360,171 @@ export default function Index() {
           <LoadingLogo />
           <Text style={styles.loadingTitle}>Dosaria</Text>
         </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Paso 1 de la recuperación: pedir el correo de la cuenta.
+  if (showForgot) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.keyboardView}
+        >
+          <ScrollView contentContainerStyle={styles.scrollContent}>
+            <View style={styles.header}>
+              <View style={styles.iconCircle}>
+                <Ionicons name="lock-open" size={48} color="#2196F3" />
+              </View>
+              <Text style={styles.title}>{t('auth.forgotTitle')}</Text>
+              <Text style={styles.subtitle}>{t('auth.forgotSubtitle')}</Text>
+            </View>
+
+            <View style={styles.form}>
+              <Text style={styles.verificationInfo}>{t('auth.forgotInfo')}</Text>
+
+              <View style={styles.inputContainer}>
+                <Ionicons name="mail-outline" size={20} color="#666" style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder={t('auth.emailPlaceholder')}
+                  placeholderTextColor="#999"
+                  value={resetEmail}
+                  onChangeText={setResetEmail}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                />
+              </View>
+
+              <TouchableOpacity
+                style={[styles.button, loading && styles.buttonDisabled]}
+                onPress={() => requestResetCode(resetEmail.trim().toLowerCase())}
+                disabled={loading}
+              >
+                <Text style={styles.buttonText}>
+                  {loading ? t('auth.processing') : t('auth.sendCode')}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.switchButton} onPress={backToLogin}>
+                <Text style={styles.switchText}>{t('auth.backToLogin')}</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    );
+  }
+
+  // Paso 2: canjear el código por una contraseña nueva.
+  if (showReset) {
+    const resendRemainingMs = resendAvailableAt ? Math.max(0, resendAvailableAt - nowTs) : 0;
+    const resendDisabled = resendRemainingMs > 0;
+    const resendCountdown = Math.ceil(resendRemainingMs / 1000);
+
+    const expiryRemainingMs = codeExpiresAt ? Math.max(0, codeExpiresAt - nowTs) : 0;
+    const codeExpired = codeExpiresAt != null && expiryRemainingMs <= 0;
+    const expiryMinutes = Math.floor(expiryRemainingMs / 60000);
+    const expirySeconds = Math.floor((expiryRemainingMs % 60000) / 1000);
+    const expiryLabel = `${expiryMinutes}:${expirySeconds.toString().padStart(2, '0')}`;
+
+    return (
+      <SafeAreaView style={styles.container}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.keyboardView}
+        >
+          <ScrollView contentContainerStyle={styles.scrollContent}>
+            <View style={styles.header}>
+              <View style={styles.iconCircle}>
+                <Ionicons name="key" size={48} color="#2196F3" />
+              </View>
+              <Text style={styles.title}>{t('auth.resetTitle')}</Text>
+              <Text style={styles.subtitle}>{t('auth.resetSubtitle')}</Text>
+            </View>
+
+            <View style={styles.form}>
+              <Text style={styles.verificationInfo}>
+                {t('auth.resetInfo', { email: resetEmail })}
+              </Text>
+
+              {codeExpiresAt != null && (
+                <Text style={[styles.expiryInfo, codeExpired && styles.expiryInfoExpired]}>
+                  {codeExpired
+                    ? t('auth.codeExpiredResend')
+                    : t('auth.codeExpiresIn', { time: expiryLabel })}
+                </Text>
+              )}
+
+              <View style={styles.inputContainer}>
+                <Ionicons name="key-outline" size={20} color="#666" style={styles.inputIcon} />
+                <TextInput
+                  style={[styles.input, styles.codeInput]}
+                  placeholder="ABC123"
+                  placeholderTextColor="#999"
+                  value={resetCode}
+                  onChangeText={(text) => setResetCode(text.toUpperCase())}
+                  autoCapitalize="characters"
+                  maxLength={6}
+                />
+              </View>
+
+              <View style={styles.inputContainer}>
+                <Ionicons name="lock-closed-outline" size={20} color="#666" style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder={t('auth.newPassword')}
+                  placeholderTextColor="#999"
+                  value={newPassword}
+                  onChangeText={setNewPassword}
+                  secureTextEntry={!showNewPassword}
+                />
+                <TouchableOpacity
+                  onPress={() => setShowNewPassword(v => !v)}
+                  style={styles.eyeButton}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Ionicons
+                    name={showNewPassword ? 'eye-off-outline' : 'eye-outline'}
+                    size={20}
+                    color="#666"
+                  />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.passwordHint}>{t('auth.passwordHint')}</Text>
+
+              <Text style={styles.sessionsNotice}>{t('auth.resetSessionsNotice')}</Text>
+
+              <TouchableOpacity
+                style={[styles.button, loading && styles.buttonDisabled]}
+                onPress={handleResetPassword}
+                disabled={loading}
+              >
+                <Text style={styles.buttonText}>
+                  {loading ? t('auth.processing') : t('auth.resetButton')}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.resendButton, resendDisabled && styles.resendButtonDisabled]}
+                onPress={() => requestResetCode(resetEmail, true)}
+                disabled={resendDisabled || loading}
+              >
+                <Text style={[styles.resendText, resendDisabled && styles.resendTextDisabled]}>
+                  {resendDisabled
+                    ? t('auth.resendIn', { seconds: resendCountdown })
+                    : t('auth.resendCode')}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.switchButton} onPress={backToLogin}>
+                <Text style={styles.switchText}>{t('auth.backToLogin')}</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </SafeAreaView>
     );
   }
@@ -448,6 +692,16 @@ export default function Index() {
 
             {!isLogin && (
               <Text style={styles.passwordHint}>{t('auth.passwordHint')}</Text>
+            )}
+
+            {isLogin && (
+              <TouchableOpacity
+                style={styles.forgotButton}
+                onPress={goToForgot}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text style={styles.forgotText}>{t('auth.forgotPassword')}</Text>
+              </TouchableOpacity>
             )}
 
             {!isLogin && (
@@ -641,5 +895,25 @@ const styles = StyleSheet.create({
     marginTop: -8,
     marginBottom: 16,
     marginLeft: 4,
+  },
+  forgotButton: {
+    alignSelf: 'flex-end',
+    marginTop: -4,
+    marginBottom: 8,
+    paddingVertical: 4,
+  },
+  forgotText: {
+    color: '#2196F3',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  sessionsNotice: {
+    fontSize: 13,
+    color: '#666',
+    backgroundColor: '#FFF8E1',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+    lineHeight: 19,
   },
 });

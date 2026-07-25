@@ -59,7 +59,20 @@
     "codeSent": "Code sent. Check your email.",
     "codeExpiresIn": "The code expires in {{time}}",
     "codeExpiredResend": "The code expired. Request a new one.",
-    "backToLogin": "← Back to login"
+    "backToLogin": "← Back to login",
+    "forgotPassword": "Forgot your password?",
+    "forgotTitle": "Reset password",
+    "forgotSubtitle": "We'll email you a code",
+    "forgotInfo": "Enter your account email and we'll send you a code to create a new password.",
+    "forgotSent": "If the email matches a Dosaria account, we've sent a code. Check your inbox and your spam folder.",
+    "sendCode": "Send code",
+    "resetTitle": "New password",
+    "resetSubtitle": "Enter the code and your new password",
+    "resetInfo": "We sent a 6-character code to {{email}}. If you don't see it, check your spam folder.",
+    "newPassword": "New password",
+    "resetButton": "Reset password",
+    "resetSessionsNotice": "For your security, resetting your password signs you out on your other devices.",
+    "resetSuccess": "Your password was updated. Sessions on your other devices were closed."
   },
   "legal": {
     "acceptPrefix": "I have read and accept the ",
@@ -418,7 +431,20 @@
       "confirm": "Delete my account",
       "errorDelete": "Could not delete account"
     },
-    "deleteAccountDesc": "Delete your account and all your data"
+    "deleteAccountDesc": "Delete your account and all your data",
+    "changePassword": {
+      "title": "Change password",
+      "desc": "Update your account password",
+      "currentLabel": "Current password",
+      "newLabel": "New password",
+      "confirmLabel": "Confirm new password",
+      "fillAll": "Fill in all three fields",
+      "mismatch": "The new password and its confirmation don't match",
+      "notice": "For your security, changing your password signs you out on your other devices. You'll need to log in again there.",
+      "confirm": "Change password",
+      "success": "Password updated. You'll need to log in again on your other devices.",
+      "error": "Could not change the password"
+    }
   },
   "about": {
     "title": "About Dosaria",

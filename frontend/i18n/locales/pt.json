@@ -59,7 +59,20 @@
     "codeSent": "Código enviado. Verifique seu e-mail.",
     "codeExpiresIn": "O código expira em {{time}}",
     "codeExpiredResend": "O código expirou. Solicite um novo.",
-    "backToLogin": "← Voltar ao login"
+    "backToLogin": "← Voltar ao login",
+    "forgotPassword": "Esqueceu sua senha?",
+    "forgotTitle": "Recuperar senha",
+    "forgotSubtitle": "Enviaremos um código por e-mail",
+    "forgotInfo": "Digite o e-mail da sua conta e enviaremos um código para criar uma nova senha.",
+    "forgotSent": "Se o e-mail corresponder a uma conta do Dosaria, enviamos um código. Verifique sua caixa de entrada e a pasta de spam.",
+    "sendCode": "Enviar código",
+    "resetTitle": "Nova senha",
+    "resetSubtitle": "Digite o código e sua nova senha",
+    "resetInfo": "Enviamos um código de 6 caracteres para {{email}}. Se não o encontrar, verifique sua pasta de spam.",
+    "newPassword": "Nova senha",
+    "resetButton": "Redefinir senha",
+    "resetSessionsNotice": "Por segurança, ao redefinir sua senha as sessões abertas nos seus outros dispositivos serão encerradas.",
+    "resetSuccess": "Sua senha foi atualizada. As sessões nos seus outros dispositivos foram encerradas."
   },
   "legal": {
     "acceptPrefix": "Li e aceito os ",
@@ -418,7 +431,20 @@
       "confirm": "Excluir minha conta",
       "errorDelete": "Não foi possível excluir a conta"
     },
-    "deleteAccountDesc": "Apague sua conta e todos os seus dados"
+    "deleteAccountDesc": "Apague sua conta e todos os seus dados",
+    "changePassword": {
+      "title": "Alterar senha",
+      "desc": "Atualize a senha da sua conta",
+      "currentLabel": "Senha atual",
+      "newLabel": "Nova senha",
+      "confirmLabel": "Confirme a nova senha",
+      "fillAll": "Preencha os três campos",
+      "mismatch": "A nova senha e sua confirmação não coincidem",
+      "notice": "Por segurança, ao alterar sua senha as sessões abertas nos seus outros dispositivos serão encerradas. Você precisará entrar novamente neles.",
+      "confirm": "Alterar senha",
+      "success": "Senha atualizada. Você precisará entrar novamente nos seus outros dispositivos.",
+      "error": "Não foi possível alterar a senha"
+    }
   },
   "about": {
     "title": "Sobre o Dosaria",
