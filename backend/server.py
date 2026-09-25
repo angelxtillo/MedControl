@@ -282,6 +282,13 @@ async def lifespan(app: FastAPI):
             await scheduler_task
         except asyncio.CancelledError:
             pass
+    # Consultas de receipts en vuelo: se cancelan para no dejar tasks pendientes
+    # cuando el loop se cierra (el próximo envío volverá a limpiar los tokens
+    # muertos que queden).
+    for task in list(_receipt_tasks):
+        task.cancel()
+    if _receipt_tasks:
+        await asyncio.gather(*list(_receipt_tasks), return_exceptions=True)
     client.close()
 
 # Create the main app
@@ -1534,6 +1541,22 @@ async def register_device(data: DeviceRegister, user_id: str = Depends(get_curre
     if not token:
         raise HTTPException(status_code=400, detail="Token requerido")
     now = datetime.now(timezone.utc)
+    # Traza del cambio de dueño: el upsert es por token (índice único), así que
+    # NUNCA se duplica el documento; si el token ya existía con otro user_id, se
+    # RE-ASOCIA al que registra (iniciar sesión con otra cuenta en este teléfono
+    # le quita el dispositivo a la cuenta anterior). Se loguea porque explica que
+    # una cuenta se quede con tokens viejos y ninguno del dispositivo actual.
+    previous = await db.devices.find_one({"token": token}, {"user_id": 1, "created_at": 1})
+    if previous is None:
+        logging.info(f"[devices] nuevo token=...{_token_tail(token)} user={user_id} platform={data.platform}")
+    elif previous.get("user_id") != user_id:
+        logging.info(
+            f"[devices] token=...{_token_tail(token)} RE-ASOCIADO "
+            f"de user={previous.get('user_id')} a user={user_id} "
+            f"(created_at={_fmt_dt(previous.get('created_at'))})"
+        )
+    else:
+        logging.info(f"[devices] token=...{_token_tail(token)} refrescado para user={user_id}")
     await db.devices.update_one(
         {"token": token},
         {
@@ -1582,12 +1605,156 @@ async def get_patient_caregiver_tokens(
     return list({d["token"] for d in devices})
 
 EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
+EXPO_RECEIPTS_URL = "https://exp.host/--/api/v2/push/getReceipts"
+
+# Los tickets solo dicen que Expo ACEPTÓ el mensaje; el resultado real de FCM/APNs
+# está en el receipt, que tarda un poco en estar disponible. Se consulta dos veces
+# (un sondeo rápido para diagnóstico en caliente y un reintento para los que aún
+# no estaban listos). Ajustables por entorno sin tocar código.
+PUSH_RECEIPTS_DELAY_SECONDS = float(os.getenv("PUSH_RECEIPTS_DELAY_SECONDS", "10"))
+PUSH_RECEIPTS_RETRY_SECONDS = float(os.getenv("PUSH_RECEIPTS_RETRY_SECONDS", "60"))
+
+# Referencias fuertes a las tasks de receipts: sin esto el GC puede recoger una
+# task en vuelo y la consulta nunca se completa.
+_receipt_tasks: set = set()
+
+
+def _token_tail(token: Optional[str]) -> str:
+    """Últimos 6 caracteres de un Expo push token, para identificar un dispositivo
+    en los logs sin escribir el token completo."""
+    if not token:
+        return "??????"
+    return token[-6:]
+
+
+def _fmt_dt(value) -> str:
+    """Fecha para logs; tolera documentos antiguos sin el campo."""
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return "sin-fecha" if value is None else str(value)
+
+
+async def _fetch_receipts(ids: List[str]) -> dict:
+    """Consulta a Expo los receipts de una lista de ticket ids.
+    Devuelve {ticket_id: receipt}; los ids que Expo aún no tiene listos
+    simplemente no aparecen en la respuesta."""
+    receipts: dict = {}
+    async with httpx.AsyncClient(timeout=15) as http_client:
+        # Expo acepta hasta 1000 ids por request; lotes de 300 por prudencia.
+        for i in range(0, len(ids), 300):
+            chunk = ids[i:i + 300]
+            try:
+                resp = await http_client.post(
+                    EXPO_RECEIPTS_URL,
+                    json={"ids": chunk},
+                    headers={"Content-Type": "application/json", "Accept": "application/json"},
+                )
+            except httpx.HTTPError as e:
+                logging.error(f"[receipts] Error de red al consultar Expo: {e}")
+                continue
+            if resp.status_code != 200:
+                logging.error(f"[receipts] Expo respondió {resp.status_code}: {resp.text[:500]}")
+                continue
+            try:
+                payload = resp.json()
+            except ValueError:
+                logging.error(f"[receipts] Respuesta no JSON de Expo: {resp.text[:300]}")
+                continue
+            for err in payload.get("errors") or []:
+                logging.error(f"[receipts] Error global de Expo: {err}")
+            chunk_data = payload.get("data")
+            if isinstance(chunk_data, dict):
+                receipts.update(chunk_data)
+    return receipts
+
+
+async def _check_receipts_later(id_to_token: dict, label: str) -> None:
+    """Tras un breve retraso consulta los receipts de los tickets enviados y los
+    loguea uno por uno. Los tokens con DeviceNotRegistered se eliminan de
+    `devices`: antes solo se miraban los tickets, así que los tokens muertos se
+    acumulaban para siempre (un usuario acaba con decenas de tokens de
+    reinstalaciones viejas y puede que ninguno sea el del dispositivo actual)."""
+    pending = dict(id_to_token)
+    for delay in (PUSH_RECEIPTS_DELAY_SECONDS, PUSH_RECEIPTS_RETRY_SECONDS):
+        if not pending:
+            return
+        try:
+            await asyncio.sleep(max(0.0, delay))
+            receipts = await _fetch_receipts(list(pending.keys()))
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logging.error(f"[receipts:{label}] error consultando receipts: {e}", exc_info=True)
+            return
+
+        removed: List[str] = []
+        for ticket_id, receipt in receipts.items():
+            token = pending.pop(ticket_id, None)
+            tail = _token_tail(token)
+            receipt = receipt or {}
+            status = receipt.get("status")
+            if status == "ok":
+                logging.info(f"[receipts:{label}] OK token=...{tail} id={ticket_id}")
+                continue
+            details = receipt.get("details") or {}
+            error = details.get("error")
+            logging.error(
+                f"[receipts:{label}] FALLO token=...{tail} id={ticket_id} status={status} "
+                f"error={error} message={receipt.get('message')} details={details}"
+            )
+            if error == "DeviceNotRegistered":
+                if token:
+                    await db.devices.delete_one({"token": token})
+                    removed.append(tail)
+            elif error == "MismatchSenderId":
+                logging.error(
+                    f"[receipts:{label}] MismatchSenderId token=...{tail}: el token fue emitido "
+                    "para otro remitente FCM (google-services.json del cliente distinto del "
+                    "sender de las credenciales push del proyecto Expo). Ese token no sirve: "
+                    "hay que regenerarlo reinstalando el build correcto."
+                )
+            elif error == "InvalidCredentials":
+                logging.error(
+                    f"[receipts:{label}] InvalidCredentials: las credenciales FCM V1 del proyecto "
+                    "Expo no son válidas para este token; revisar la Service Account Key subida a Expo."
+                )
+            elif error == "MessageTooBig":
+                logging.error(
+                    f"[receipts:{label}] MessageTooBig token=...{tail}: recortar title/body/data."
+                )
+
+        if removed:
+            logging.info(
+                f"[receipts:{label}] tokens DeviceNotRegistered eliminados={len(removed)} "
+                + "(" + ", ".join("..." + t for t in removed) + ")"
+            )
+
+    if pending:
+        logging.warning(
+            f"[receipts:{label}] sin receipt tras los reintentos: {len(pending)} "
+            + "(" + ", ".join("..." + _token_tail(t) for t in pending.values()) + "). "
+            + "Expo aún no lo tenía listo; no implica fallo."
+        )
+
+
+def _spawn_receipt_check(id_to_token: dict, label: str) -> None:
+    """Lanza la consulta de receipts en background para no bloquear la respuesta."""
+    try:
+        task = asyncio.create_task(_check_receipts_later(dict(id_to_token), label))
+    except RuntimeError:
+        logging.warning("[receipts] sin event loop, no se consultan receipts")
+        return
+    _receipt_tasks.add(task)
+    task.add_done_callback(_receipt_tasks.discard)
+
 
 async def send_push_to_tokens(
     tokens: List[str],
     title: str,
     body: str,
     data: Optional[dict] = None,
+    label: str = "push",
+    check_receipts: bool = True,
 ) -> dict:
     """Envía un push a una lista de Expo push tokens vía la HTTP API de Expo.
     Reutilizable: la Fase 3 (scheduler) la llamará a la hora de la dosis.
@@ -1646,14 +1813,47 @@ async def send_push_to_tokens(
                 tickets.append({"token": msg["to"], **ticket})
 
     # Limpieza básica de tokens muertos: DeviceNotRegistered -> borrar de devices.
+    # Poco frecuente aquí: Expo suele devolver el ticket "ok" y el fallo real
+    # aparece después en el receipt.
     removed: List[str] = []
     for tk in tickets:
         if tk.get("status") == "error" and (tk.get("details") or {}).get("error") == "DeviceNotRegistered":
             await db.devices.delete_one({"token": tk["token"]})
             removed.append(tk["token"])
 
-    logging.info(f"[push] enviados={len(valid)} tickets={len(tickets)} muertos_eliminados={len(removed)}")
-    return {"sent": len(valid), "tickets": tickets, "removed_tokens": removed}
+    # Detalle por ticket: identifica el dispositivo por los últimos 6 caracteres
+    # del token y deja el ticket id para poder cruzarlo con su receipt.
+    id_to_token: dict = {}
+    for tk in tickets:
+        tail = _token_tail(tk.get("token"))
+        if tk.get("status") == "ok":
+            ticket_id = tk.get("id")
+            logging.info(f"[push:{label}] ticket ok token=...{tail} id={ticket_id}")
+            if ticket_id:
+                id_to_token[ticket_id] = tk["token"]
+        else:
+            logging.error(
+                f"[push:{label}] ticket ERROR token=...{tail} status={tk.get('status')} "
+                f"message={tk.get('message')} details={tk.get('details')}"
+            )
+
+    logging.info(
+        f"[push:{label}] enviados={len(valid)} tickets={len(tickets)} "
+        f"muertos_eliminados={len(removed)} receipts_pendientes={len(id_to_token)}"
+    )
+
+    # Un ticket aceptado NO significa entregado: el veredicto de FCM/APNs está en
+    # el receipt, que se consulta en background (DeviceNotRegistered,
+    # MismatchSenderId, InvalidCredentials, MessageTooBig...).
+    if check_receipts and id_to_token:
+        _spawn_receipt_check(id_to_token, label)
+
+    return {
+        "sent": len(valid),
+        "tickets": tickets,
+        "removed_tokens": removed,
+        "receipt_ids": list(id_to_token.keys()),
+    }
 
 # ============= SCHEDULER DE PUSH (FASE 3B) =============
 # Proceso interno (asyncio task lanzada en el lifespan) que cada minuto revisa
@@ -1739,6 +1939,7 @@ async def _notify_dose(
         tokens,
         title,
         body,
+        label=f"dose:{kind}",
         data={
             "type": "dose",
             "kind": kind,
@@ -1868,16 +2069,44 @@ async def scheduler_loop() -> None:
 async def test_push(user_id: str = Depends(get_current_user)):
     """FASE 2 (prueba de plomería): envía un push fijo a TODOS los dispositivos
     del usuario actual y devuelve los tickets de Expo para diagnóstico."""
-    devices = await db.devices.find({"user_id": user_id}, {"token": 1}).to_list(100)
+    devices = await db.devices.find(
+        {"user_id": user_id},
+        {"token": 1, "platform": 1, "created_at": 1, "updated_at": 1},
+    ).sort("updated_at", -1).to_list(100)
     tokens = [d["token"] for d in devices]
     if not tokens:
         raise HTTPException(status_code=400, detail="No hay dispositivos registrados para este usuario")
+
+    # Inventario de dispositivos ANTES de enviar. Los últimos 6 caracteres del
+    # token permiten cotejar con el token que la app imprime en [push-token] y
+    # así saber cuál de los documentos es el del dispositivo actual; las fechas
+    # distinguen los registros recientes de los heredados de builds viejos.
+    logging.info(f"[test-push] usuario={user_id} dispositivos={len(devices)} (más reciente primero)")
+    for d in devices:
+        logging.info(
+            f"[test-push] token=...{_token_tail(d.get('token'))} "
+            f"platform={d.get('platform')} "
+            f"created_at={_fmt_dt(d.get('created_at'))} "
+            f"updated_at={_fmt_dt(d.get('updated_at'))}"
+        )
+
     result = await send_push_to_tokens(
         tokens,
         "Dosaria",
         "Notificación de prueba ✅",
         data={"type": "test"},
+        label="test",
     )
+    # Mismo inventario en la respuesta, por si se diagnostica desde el cliente.
+    result["devices"] = [
+        {
+            "token_tail": _token_tail(d.get("token")),
+            "platform": d.get("platform"),
+            "created_at": _fmt_dt(d.get("created_at")),
+            "updated_at": _fmt_dt(d.get("updated_at")),
+        }
+        for d in devices
+    ]
     return result
 
 # ============= MEDICATION ENDPOINTS =============
