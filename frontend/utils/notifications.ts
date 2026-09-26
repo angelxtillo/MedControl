@@ -210,14 +210,6 @@ export async function registerPushToken(
   }
 }
 
-// Token que ESTA sesión confirmó registrar en el backend (null si en esta
-// ejecución todavía no se ha registrado). Ya no lee almacenamiento: un valor
-// persistido no dice nada sobre lo que tiene el servidor, que es justo el error
-// que dejaba la pantalla de Notificaciones mintiendo durante meses.
-export async function getRegisteredPushToken(): Promise<string | null> {
-  return sessionRegistration?.token ?? null;
-}
-
 // Da de baja el token de este dispositivo en el backend (al cerrar sesión /
 // borrar cuenta) y olvida el registro de la sesión para que el próximo login lo
 // vuelva a registrar (re-asociándolo a la cuenta que entre).
@@ -232,6 +224,43 @@ export async function unregisterPushToken(): Promise<void> {
     console.warn('No se pudo dar de baja el push token:', e);
   } finally {
     sessionRegistration = null;
+  }
+}
+
+// Resultado de comprobar el registro CONTRA EL SERVIDOR. `null` en `registered`
+// significa que no se pudo comprobar (sin red, backend caído): es distinto de
+// "no registrado" y la UI lo distingue.
+export type DeviceRegistrationStatus = {
+  registered: boolean | null;
+  ownedByOtherUser: boolean;
+  totalDevices: number | null;
+  token: string | null;
+};
+
+// Pregunta al backend si el token de ESTE dispositivo está registrado para el
+// usuario de la sesión. Es la única fuente de verdad: el estado local solo dice
+// lo que la app cree que envió, y eso fue mentira durante dos meses.
+export async function verifyDeviceRegistration(): Promise<DeviceRegistrationStatus> {
+  const token = await getKnownPushToken().catch(() => null);
+  const resolved = token ?? (await getCurrentPushToken().catch(() => null));
+  if (!resolved) {
+    // Sin token no hay nada que comprobar: el dispositivo no puede estar
+    // registrado (falta el permiso, o getExpoPushTokenAsync falló).
+    return { registered: false, ownedByOtherUser: false, totalDevices: null, token: null };
+  }
+  try {
+    const res = await api.post('/devices/check', { token: resolved });
+    return {
+      registered: !!res.data?.registered,
+      ownedByOtherUser: !!res.data?.owned_by_other_user,
+      totalDevices: typeof res.data?.total_devices === 'number' ? res.data.total_devices : null,
+      token: resolved,
+    };
+  } catch (e: any) {
+    console.warn(
+      `[push-token] POST /devices/check FALLÓ: status=${e?.response?.status ?? 'sin respuesta'}`,
+    );
+    return { registered: null, ownedByOtherUser: false, totalDevices: null, token: resolved };
   }
 }
 

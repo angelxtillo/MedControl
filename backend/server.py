@@ -559,6 +559,9 @@ class DeviceRegister(BaseModel):
 class DeviceUnregister(BaseModel):
     token: str = Field(..., max_length=512)
 
+class DeviceCheck(BaseModel):
+    token: str = Field(..., max_length=512)
+
 # ============= HELPERS =============
 def utc_now_naive() -> datetime:
     """Retorna datetime UTC naive para comparar con strings parseados (YYYY-MM-DDTHH:MM:SS)."""
@@ -1617,6 +1620,44 @@ async def unregister_device(data: DeviceUnregister, user_id: str = Depends(get_c
     token = data.token.strip()
     await db.devices.delete_one({"token": token, "user_id": user_id})
     return {"message": "Dispositivo eliminado"}
+
+@api_router.post("/devices/check")
+async def check_device(data: DeviceCheck, user_id: str = Depends(get_current_user)):
+    """¿Está el token de ESTE dispositivo registrado para el usuario actual?
+
+    Existe porque la app no puede responderlo sola: su estado local solo dice lo
+    que ella cree que envió, y durante dos meses eso fue mentira (la pantalla
+    mostraba "dispositivo listo" mientras el servidor no tenía el token). La
+    verdad está aquí, en `devices`.
+
+    El token va en el body y no en la query para no dejarlo en los logs de acceso.
+    `owned_by_other_user` no filtra nada de nadie: quien llama posee el token (es
+    su propio dispositivo) y no se revela de quién es, solo que no es suyo — que
+    es justo el caso de "inicié sesión con otra cuenta en este teléfono"."""
+    token = data.token.strip()
+    if not token:
+        raise HTTPException(status_code=400, detail="Token requerido")
+
+    doc = await db.devices.find_one(
+        {"token": token}, {"user_id": 1, "platform": 1, "created_at": 1, "updated_at": 1}
+    )
+    total = await db.devices.count_documents({"user_id": user_id})
+    registered = bool(doc) and doc.get("user_id") == user_id
+
+    logging.info(
+        f"[devices] check user={user_id} token=...{_token_tail(token)} "
+        f"registrado={registered} total_del_usuario={total}"
+    )
+
+    return {
+        "registered": registered,
+        # Solo se informan las fechas del propio registro.
+        "platform": doc.get("platform") if registered else None,
+        "created_at": _fmt_dt(doc.get("created_at")) if registered else None,
+        "updated_at": _fmt_dt(doc.get("updated_at")) if registered else None,
+        "owned_by_other_user": bool(doc) and doc.get("user_id") != user_id,
+        "total_devices": total,
+    }
 
 async def get_patient_caregiver_tokens(
     patient_id: str,
