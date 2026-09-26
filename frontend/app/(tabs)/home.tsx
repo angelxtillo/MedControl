@@ -67,9 +67,9 @@ export default function Home() {
     // exista el permiso y sale sin registrar; aquí lo reintentamos justo tras el
     // grant para que el token quede registrado sin tener que reabrir la app.
     requestNotificationPermissions().then((granted) => {
-      if (granted) registerPushToken().catch(() => {});
+      if (granted) registerPushToken(user?.id).catch(() => {});
     });
-  }, []);
+  }, [user?.id]);
 
   useFocusEffect(
     useCallback(() => {

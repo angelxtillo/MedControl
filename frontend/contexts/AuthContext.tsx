@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import { AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import Constants from 'expo-constants';
@@ -8,7 +9,10 @@ import {
   cancelAllScheduledNotifications,
   registerPushToken,
   unregisterPushToken,
-  clearLocalPushToken,
+  clearPushTokenRegistration,
+  migrateLegacyPushTokenCache,
+  getKnownPushToken,
+  getCurrentPushToken,
 } from '../utils/notifications';
 
 const API_URL = Constants.expoConfig?.extra?.EXPO_PUBLIC_BACKEND_URL || process.env.EXPO_PUBLIC_BACKEND_URL;
@@ -46,6 +50,22 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Token de este dispositivo para enviarlo en change/reset-password: el backend
+// revoca los push tokens de la cuenta y conserva SOLO el que se le indique, así
+// que este teléfono no se queda sin notificaciones aunque el re-registro
+// posterior falle. Nunca debe hacer fallar el cambio de contraseña: ante
+// cualquier problema devuelve undefined y el backend revoca todo (comportamiento
+// de siempre), que el re-registro con force intentará reparar.
+async function currentDevicePushToken(): Promise<string | undefined> {
+  try {
+    const known = await getKnownPushToken();
+    if (known) return known;
+    return (await getCurrentPushToken()) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
@@ -57,7 +77,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // cancelan todas para que no queden zombis sonando junto al push del
     // servidor. Idempotente: en builds nuevos no hay nada programado.
     cancelAllScheduledNotifications().catch(() => {});
-    loadStoredAuth();
+    // Borra la caché heredada de "ya registrado" que dejaba a un dispositivo sin
+    // notificaciones para siempre tras un cambio de contraseña (ver
+    // utils/notifications.ts). Antes de loadStoredAuth, que ya registra.
+    migrateLegacyPushTokenCache()
+      .catch(() => {})
+      .finally(() => {
+        loadStoredAuth();
+      });
   }, []);
 
   // When any authenticated request returns 401/403, clear the in-memory session.
@@ -72,11 +99,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       );
       // Sesión inválida: no podemos llamar al backend, pero olvidamos el token
       // local para que el próximo login lo re-registre con la cuenta correcta.
-      clearLocalPushToken().catch(() => {});
+      clearPushTokenRegistration().catch(() => {});
       setToken(null);
       setUser(null);
     });
     return () => setUnauthorizedHandler(null);
+  }, []);
+
+  // Re-registro al volver a foreground. Es la vía de auto-reparación cuando el
+  // backend pierde el token del dispositivo a mitad de sesión (revocación por
+  // contraseña, limpieza por un receipt DeviceNotRegistered) sin necesidad de
+  // reiniciar la app ni de cerrar sesión. El dedupe de registerPushToken limita
+  // el tráfico real a un POST cada 6 h como máximo.
+  const userIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    userIdRef.current = user?.id ?? null;
+  }, [user?.id]);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && userIdRef.current) {
+        registerPushToken(userIdRef.current).catch(() => {});
+      }
+    });
+    return () => sub.remove();
   }, []);
 
   const loadStoredAuth = async () => {
@@ -97,8 +142,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           await AsyncStorage.setItem('user', JSON.stringify(freshUser));
           setToken(storedToken);
           setUser(freshUser);
-          // Sesión válida al arrancar: registrar/actualizar el push token.
-          registerPushToken().catch(() => {});
+          // Sesión válida al arrancar: registrar/actualizar el push token. Sin
+          // condiciones: es el punto que repara al dispositivo si el servidor
+          // perdió su token mientras la app estaba cerrada.
+          registerPushToken(freshUser?.id).catch(() => {});
         } catch (err: any) {
           const status = err?.response?.status;
           if (status === 401 || status === 403) {
@@ -129,7 +176,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setToken(newToken);
       setUser(newUser);
       // Registrar el push token de este dispositivo para la cuenta que entró.
-      registerPushToken().catch(() => {});
+      registerPushToken(newUser?.id).catch(() => {});
     } catch (error: any) {
       throw new Error(getApiErrorMessage(error, 'Error al iniciar sesión'));
     }
@@ -159,7 +206,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setToken(newToken);
       setUser(newUser);
       // Auto-login sin verificación (si el backend lo permitiera): registrar token.
-      registerPushToken().catch(() => {});
+      registerPushToken(newUser?.id).catch(() => {});
       return { requiresVerification: false };
     } catch (error: any) {
       throw new Error(getApiErrorMessage(error, 'Error al registrarse'));
@@ -178,7 +225,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setToken(newToken);
       setUser(newUser);
       // Verificación exitosa = sesión nueva: registrar el push token.
-      registerPushToken().catch(() => {});
+      registerPushToken(newUser?.id).catch(() => {});
     } catch (error: any) {
       throw new Error(getApiErrorMessage(error, 'Código inválido'));
     }
@@ -210,10 +257,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const resetPassword = async (email: string, code: string, newPassword: string) => {
     try {
+      const pushToken = await currentDevicePushToken();
       const response = await axios.post(`${API_URL}/api/auth/reset-password`, {
         email: email.trim().toLowerCase(),
         code: code.trim().toUpperCase(),
         new_password: newPassword,
+        push_token: pushToken,
       }, { timeout: 60000 });
       // Igual que verify-email: el restablecimiento deja la sesión abierta en
       // ESTE dispositivo (las de los demás quedan invalidadas en el backend).
@@ -222,7 +271,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await AsyncStorage.setItem('user', JSON.stringify(newUser));
       setToken(newToken);
       setUser(newUser);
-      registerPushToken().catch(() => {});
+      // force: el backend acaba de revocar los dispositivos de la cuenta (todos,
+      // si no llegó push_token), así que aquí NO se puede confiar en el dedupe.
+      registerPushToken(newUser?.id, { force: true }).catch(() => {});
     } catch (error: any) {
       throw new Error(getApiErrorMessage(error, 'No se pudo restablecer la contraseña'));
     }
@@ -231,9 +282,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const changePassword = async (currentPassword: string, newPassword: string) => {
     const currentToken = token || (await AsyncStorage.getItem('token'));
     try {
+      const pushToken = await currentDevicePushToken();
       const response = await axios.post(
         `${API_URL}/api/auth/change-password`,
-        { current_password: currentPassword, new_password: newPassword },
+        {
+          current_password: currentPassword,
+          new_password: newPassword,
+          push_token: pushToken,
+        },
         { headers: { Authorization: `Bearer ${currentToken}` }, timeout: 60000 },
       );
       // OBLIGATORIO guardar el token devuelto: el backend invalida todos los
@@ -244,9 +300,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await AsyncStorage.setItem('user', JSON.stringify(newUser));
       setToken(newToken);
       setUser(newUser);
-      // El backend dio de baja los push tokens de la cuenta (incluido el de este
-      // dispositivo) para expulsar a los demás; re-registramos el nuestro.
-      registerPushToken().catch(() => {});
+      // El backend dio de baja los push tokens de la cuenta para expulsar a los
+      // demás (conservando el nuestro si le llegó push_token); re-registramos con
+      // force, sin confiar en el dedupe: este es EXACTAMENTE el camino que dejaba
+      // al dispositivo sin notificaciones para siempre.
+      registerPushToken(newUser?.id, { force: true }).catch(() => {});
     } catch (error: any) {
       throw new Error(getApiErrorMessage(error, 'No se pudo cambiar la contraseña'));
     }

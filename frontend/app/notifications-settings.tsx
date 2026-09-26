@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useNotificationPermission } from '../hooks/useNotificationPermission';
+import { useAuth } from '../contexts/AuthContext';
 import {
   requestNotificationPermissions,
   registerPushToken,
@@ -23,6 +24,7 @@ import { getApiErrorMessage } from '../utils/errors';
 
 export default function NotificationsSettingsScreen() {
   const { t } = useTranslation();
+  const { user } = useAuth();
   const { granted, canAskAgain, loading, refresh } = useNotificationPermission();
   const [tokenRegistered, setTokenRegistered] = useState<boolean | null>(null);
   const [sending, setSending] = useState(false);
@@ -43,10 +45,10 @@ export default function NotificationsSettingsScreen() {
   // permiso estaría OK pero el backend no tendría a dónde enviar. Idempotente.
   useEffect(() => {
     if (!loading && granted && !wasGranted.current) {
-      registerPushToken().then(loadToken).catch(() => {});
+      registerPushToken(user?.id).then(loadToken).catch(() => {});
     }
     wasGranted.current = granted;
-  }, [granted, loading, loadToken]);
+  }, [granted, loading, loadToken, user?.id]);
 
   const handleEnable = async () => {
     // canAskAgain true: el sistema todavía muestra el diálogo -> pedirlo dentro
@@ -56,7 +58,7 @@ export default function NotificationsSettingsScreen() {
       setRequesting(true);
       try {
         const ok = await requestNotificationPermissions();
-        if (ok) await registerPushToken();
+        if (ok) await registerPushToken(user?.id);
       } finally {
         setRequesting(false);
         await refresh();
@@ -72,8 +74,10 @@ export default function NotificationsSettingsScreen() {
     try {
       // Asegura el token antes de pedir la prueba: quien acaba de conceder el
       // permiso puede no tenerlo registrado aún, y /devices/test-push responde
-      // 400 si el usuario no tiene dispositivos.
-      await registerPushToken();
+      // 400 si el usuario no tiene dispositivos. force: un botón de diagnóstico
+      // NO debe confiar en ninguna caché (antes se saltaba el POST /devices y la
+      // prueba se enviaba a los tokens viejos, sin el de este dispositivo).
+      await registerPushToken(user?.id, { force: true });
       await loadToken();
       await api.post('/devices/test-push');
       Alert.alert(

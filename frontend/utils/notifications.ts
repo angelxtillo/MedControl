@@ -25,10 +25,36 @@ const LEGACY_MEDICATION_CHANNEL = 'medication-reminders';
 // que el config plugin copia durante el prebuild de EAS).
 const MEDICATION_SOUND = 'dosaria_alert.wav';
 
-// Último Expo push token enviado al backend (por dispositivo). Sirve para no
-// reenviarlo en cada arranque y para re-registrarlo si cambia o si se cambia de
-// cuenta en el mismo dispositivo.
-const LAST_PUSH_TOKEN_KEY = 'expoPushToken';
+// BUG CORREGIDO (julio-septiembre 2026): antes se guardaba en AsyncStorage el
+// último token enviado al backend y se usaba como "ya registrado" para saltarse
+// el POST /devices. Esa caché sobrevivía a los reinicios de la app y al borrado
+// del token en el servidor (revoke_user_devices tras un cambio o
+// restablecimiento de contraseña), así que el dispositivo se quedaba sin
+// notificaciones PARA SIEMPRE mientras la pantalla decía "listo"; lo único que
+// la limpiaba era un logout manual.
+//
+// Ahora el dedupe es EN MEMORIA y por sesión: cada arranque de la app re-registra
+// una vez (POST /devices es un upsert idempotente por token, no cuesta nada) y
+// nada puede quedar desincronizado más de una sesión. Incluye el userId para que
+// un cambio de cuenta siempre re-registre aunque el token sea el mismo, y la
+// marca de tiempo para que el re-registro al volver a foreground pueda reparar
+// una pérdida ocurrida a mitad de sesión.
+let sessionRegistration: { token: string; userId: string | null; at: number } | null = null;
+
+// Cada cuánto, como máximo, se repite el registro dentro de una misma sesión
+// (re-registro al volver a foreground). Es la red que repara al dispositivo si
+// el servidor pierde su token sin que la app se reinicie.
+const REREGISTER_MIN_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 h
+
+// Clave heredada de la caché vieja. Se borra en la migración del primer arranque
+// para que ningún dispositivo arrastre ese estado mentiroso.
+const LEGACY_REGISTERED_TOKEN_KEY = 'expoPushToken';
+
+// Último token conocido de este dispositivo. SOLO informativo: permite dar de
+// baja el dispositivo al cerrar sesión (y decirle al backend cuál conservar al
+// cambiar la contraseña) sin depender de la red de Expo. NUNCA se usa para
+// decidir si hace falta registrar.
+const LAST_KNOWN_TOKEN_KEY = 'lastKnownPushToken';
 
 // Cómo mostrar una notificación cuando llega con la app en PRIMER PLANO
 // (en background/cerrada la muestra el sistema). El push del servidor ya
@@ -72,47 +98,96 @@ export async function cancelAllScheduledNotifications(): Promise<void> {
   await Notifications.cancelAllScheduledNotificationsAsync();
 }
 
-// FASE 1 (push compartido): obtiene el Expo push token de ESTE dispositivo y lo
-// registra en el backend, solo si cambió (para no spamear en cada arranque).
-// Requiere el permiso de notificaciones ya concedido; NO lo solicita aquí.
-// Instrumentado con prefijo [push-token] para diagnosticar en adb logcat
-// (tag ReactNativeJS) dónde muere el registro en builds standalone.
-export async function registerPushToken(): Promise<void> {
+// Borra la caché heredada de "ya registrado" (ver sessionRegistration). Se llama
+// una vez al arrancar la app: idempotente y barata.
+export async function migrateLegacyPushTokenCache(): Promise<void> {
   try {
-    const perm = await Notifications.getPermissionsAsync();
-    console.log(`[push-token] permiso: granted=${perm.granted} status=${perm.status}`);
-    if (!perm.granted) return;
+    const legacy = await AsyncStorage.getItem(LEGACY_REGISTERED_TOKEN_KEY);
+    if (legacy === null) return;
+    await AsyncStorage.removeItem(LEGACY_REGISTERED_TOKEN_KEY);
+    // Se conserva como "último token conocido" (uso informativo) para no perder
+    // la capacidad de dar de baja el dispositivo sin red de Expo.
+    await AsyncStorage.setItem(LAST_KNOWN_TOKEN_KEY, legacy);
+    console.log('[push-token] caché heredada de registro eliminada (migración)');
+  } catch (e) {
+    console.warn('[push-token] no se pudo migrar la caché heredada:', e);
+  }
+}
 
-    const projectId =
-      (Constants.expoConfig as any)?.extra?.eas?.projectId ??
-      (Constants as any)?.easConfig?.projectId;
-    console.log(`[push-token] projectId: ${projectId ?? 'NO DISPONIBLE'}`);
-    if (!projectId) return;
+// Expo push token de ESTE dispositivo, preguntándoselo al sistema. Requiere el
+// permiso ya concedido; NO lo solicita aquí. Instrumentado con prefijo
+// [push-token] para diagnosticar en adb logcat (tag ReactNativeJS) dónde muere
+// el registro en builds standalone.
+export async function getCurrentPushToken(): Promise<string | null> {
+  const perm = await Notifications.getPermissionsAsync();
+  console.log(`[push-token] permiso: granted=${perm.granted} status=${perm.status}`);
+  if (!perm.granted) return null;
 
-    let token: string;
-    try {
-      const result = await Notifications.getExpoPushTokenAsync({ projectId });
-      token = result.data;
-      console.log(`[push-token] getExpoPushTokenAsync OK: ${token}`);
-    } catch (e: any) {
-      // Excepción completa: en builds sin google-services.json aquí sale
-      // "Default FirebaseApp is not initialized" (o similar de FCM).
-      console.warn(
-        `[push-token] getExpoPushTokenAsync FALLÓ: ${e?.message ?? e}`,
-        e?.code ?? '',
-        e,
-      );
-      return;
-    }
-    if (!token) {
-      console.warn('[push-token] token vacío, no se registra');
-      return;
-    }
+  const projectId =
+    (Constants.expoConfig as any)?.extra?.eas?.projectId ??
+    (Constants as any)?.easConfig?.projectId;
+  console.log(`[push-token] projectId: ${projectId ?? 'NO DISPONIBLE'}`);
+  if (!projectId) return null;
 
-    const lastSent = await AsyncStorage.getItem(LAST_PUSH_TOKEN_KEY);
-    if (lastSent === token) {
-      console.log('[push-token] sin cambios (ya registrado), no se reenvía');
-      return;
+  let token: string | undefined;
+  try {
+    const result = await Notifications.getExpoPushTokenAsync({ projectId });
+    token = result.data;
+    console.log(`[push-token] getExpoPushTokenAsync OK: ${token}`);
+  } catch (e: any) {
+    // Excepción completa: en builds sin google-services.json aquí sale
+    // "Default FirebaseApp is not initialized" (o similar de FCM).
+    console.warn(
+      `[push-token] getExpoPushTokenAsync FALLÓ: ${e?.message ?? e}`,
+      e?.code ?? '',
+      e,
+    );
+    return null;
+  }
+  if (!token) {
+    console.warn('[push-token] token vacío');
+    return null;
+  }
+  await AsyncStorage.setItem(LAST_KNOWN_TOKEN_KEY, token).catch(() => {});
+  return token;
+}
+
+// Token de este dispositivo sin pasar por la red de Expo: el de esta sesión o,
+// si no hay, el último conocido en almacenamiento. Para el logout y para decirle
+// al backend qué dispositivo conservar al cambiar la contraseña.
+export async function getKnownPushToken(): Promise<string | null> {
+  if (sessionRegistration) return sessionRegistration.token;
+  try {
+    return await AsyncStorage.getItem(LAST_KNOWN_TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+// Registra el Expo push token de este dispositivo para el usuario de la sesión.
+// El backend hace upsert por token, así que llamarla de más es inofensivo.
+// `userId`: dueño esperado del token. Se usa en el dedupe para que un cambio de
+// cuenta siempre re-registre. `force`: ignora el dedupe (tras un cambio de
+// contraseña, o al pulsar el botón de prueba: un diagnóstico no debe confiar en
+// ninguna caché). Devuelve el token registrado, o null si no se pudo.
+export async function registerPushToken(
+  userId?: string | null,
+  opts?: { force?: boolean },
+): Promise<string | null> {
+  try {
+    const token = await getCurrentPushToken();
+    if (!token) return null;
+
+    const owner = userId ?? null;
+    const dedupeHit =
+      !opts?.force &&
+      sessionRegistration !== null &&
+      sessionRegistration.token === token &&
+      sessionRegistration.userId === owner &&
+      Date.now() - sessionRegistration.at < REREGISTER_MIN_INTERVAL_MS;
+    if (dedupeHit) {
+      console.log('[push-token] ya registrado en esta sesión, no se reenvía');
+      return token;
     }
 
     try {
@@ -123,27 +198,32 @@ export async function registerPushToken(): Promise<void> {
         `[push-token] POST /devices FALLÓ: status=${e?.response?.status ?? 'sin respuesta'}`,
         e?.response?.data ?? e?.message ?? e,
       );
-      return; // no cachear: así se reintenta en el próximo arranque/login
+      // No se marca como registrado: se reintenta en el próximo punto de entrada
+      // (foreground, login, arranque).
+      return null;
     }
-    await AsyncStorage.setItem(LAST_PUSH_TOKEN_KEY, token);
+    sessionRegistration = { token, userId: owner, at: Date.now() };
+    return token;
   } catch (e) {
     console.warn('[push-token] error inesperado:', e);
+    return null;
   }
 }
 
-// Devuelve el Expo push token que ya quedó registrado en el backend para este
-// dispositivo (o null si aún no se registró). Solo lectura del cache local; la
-// pantalla de Notificaciones lo usa para mostrar si el dispositivo está listo.
+// Token que ESTA sesión confirmó registrar en el backend (null si en esta
+// ejecución todavía no se ha registrado). Ya no lee almacenamiento: un valor
+// persistido no dice nada sobre lo que tiene el servidor, que es justo el error
+// que dejaba la pantalla de Notificaciones mintiendo durante meses.
 export async function getRegisteredPushToken(): Promise<string | null> {
-  return AsyncStorage.getItem(LAST_PUSH_TOKEN_KEY);
+  return sessionRegistration?.token ?? null;
 }
 
 // Da de baja el token de este dispositivo en el backend (al cerrar sesión /
-// borrar cuenta) y limpia el cache local para que el próximo login lo vuelva a
-// registrar (re-asociándolo a la cuenta que entre).
+// borrar cuenta) y olvida el registro de la sesión para que el próximo login lo
+// vuelva a registrar (re-asociándolo a la cuenta que entre).
 export async function unregisterPushToken(): Promise<void> {
   try {
-    const token = await AsyncStorage.getItem(LAST_PUSH_TOKEN_KEY);
+    const token = await getKnownPushToken();
     if (token) {
       // Timeout corto: el logout no debe colgarse si el backend está frío.
       await api.delete('/devices', { data: { token }, timeout: 10000 });
@@ -151,13 +231,14 @@ export async function unregisterPushToken(): Promise<void> {
   } catch (e) {
     console.warn('No se pudo dar de baja el push token:', e);
   } finally {
-    await AsyncStorage.removeItem(LAST_PUSH_TOKEN_KEY).catch(() => {});
+    sessionRegistration = null;
   }
 }
 
-// Solo limpia el cache local del token (sin llamar al backend). Para cuando la
+// Olvida el registro de esta sesión (sin llamar al backend). Para cuando la
 // sesión ya es inválida (401) y no podemos llamar a la API: así el próximo login
-// re-registra el token y lo re-asocia al usuario correcto.
-export async function clearLocalPushToken(): Promise<void> {
-  await AsyncStorage.removeItem(LAST_PUSH_TOKEN_KEY).catch(() => {});
+// re-registra el token y lo re-asocia al usuario correcto. No borra el "último
+// token conocido": ese sigue siendo el token de este dispositivo.
+export async function clearPushTokenRegistration(): Promise<void> {
+  sessionRegistration = null;
 }
