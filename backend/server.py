@@ -366,6 +366,12 @@ class ResetPasswordRequest(BaseModel):
     email: EmailStr
     code: str = Field(..., min_length=1, max_length=20)
     new_password: str
+    # Expo push token de ESTE dispositivo. Opcional a propósito: los clientes ya
+    # instalados no lo envían y para ellos se mantiene el comportamiento de
+    # siempre (revocar TODOS los dispositivos). Cuando llega, es el único que
+    # sobrevive a la revocación, así que el dispositivo que restablece no pierde
+    # sus notificaciones aunque el re-registro posterior falle.
+    push_token: Optional[str] = Field(None, max_length=512)
 
     @field_validator('new_password')
     @classmethod
@@ -375,6 +381,8 @@ class ResetPasswordRequest(BaseModel):
 class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str
+    # Ver ResetPasswordRequest.push_token: opcional, y sin él se revoca todo.
+    push_token: Optional[str] = Field(None, max_length=512)
 
     @field_validator('new_password')
     @classmethod
@@ -626,19 +634,46 @@ async def ensure_token_not_revoked(user_id: str, issued_at_ts) -> None:
     if issued_at < changed_at:
         raise HTTPException(status_code=401, detail=SESSION_REVOKED_DETAIL)
 
-async def revoke_user_devices(user_id: str) -> None:
+async def revoke_user_devices(user_id: str, keep_token: Optional[str] = None) -> None:
     """Da de baja los push tokens de la cuenta tras un cambio de contraseña.
 
     El push NO pasa por get_current_user, así que invalidar la sesión no basta:
     el dispositivo expulsado seguiría recibiendo los recordatorios de dosis, que
-    llevan nombre del paciente y del medicamento. El dispositivo legítimo se
-    vuelve a registrar solo: la app llama a registerPushToken() tras un cambio o
-    restablecimiento exitoso, igual que hace tras el login."""
-    result = await db.devices.delete_many({"user_id": user_id})
+    llevan nombre del paciente y del medicamento.
+
+    ADVERTENCIA (bug real, 2026-07): esta función se escribió confiando en que
+    "el dispositivo legítimo se vuelve a registrar solo, porque la app llama a
+    registerPushToken() tras un cambio exitoso". La llamada existe, pero durante
+    dos meses fue un no-op: el cliente cacheaba en AsyncStorage que ya había
+    registrado el token y se saltaba el POST /devices. Resultado: el teléfono que
+    cambiaba la contraseña se quedaba sin notificaciones PARA SIEMPRE (hasta un
+    logout manual, que es lo único que limpiaba esa caché) mientras la pantalla
+    de Notificaciones seguía diciendo "dispositivo listo". No volver a apoyar la
+    seguridad de este borrado en que el cliente se repare a sí mismo.
+
+    `keep_token`: Expo push token del dispositivo que hace la operación, cuando
+    lo envía. Ese token es el único que sobrevive, de modo que el dispositivo
+    legítimo no depende del re-registro posterior. Sin `keep_token` (clientes ya
+    instalados, que no lo mandan) se revoca TODO, como hasta ahora: no se
+    debilita la expulsión de los demás dispositivos por compatibilidad."""
+    query: dict = {"user_id": user_id}
+    if keep_token:
+        query["token"] = {"$ne": keep_token}
+    result = await db.devices.delete_many(query)
     if result.deleted_count:
         logging.info(
             f"[password] {result.deleted_count} dispositivo(s) dados de baja para "
             f"user={user_id} por cambio de contraseña"
+            + (f" (conservado ...{_token_tail(keep_token)})" if keep_token else " (todos)")
+        )
+    if keep_token:
+        # Confirma en logs si el dispositivo conservado seguía registrado: si no
+        # existía (p. ej. lo borró antes un receipt DeviceNotRegistered), el
+        # re-registro del cliente es la única vía y conviene verlo.
+        kept = await db.devices.find_one({"user_id": user_id, "token": keep_token}, {"_id": 1})
+        logging.info(
+            f"[password] user={user_id} token del dispositivo actual "
+            f"...{_token_tail(keep_token)} conservado={bool(kept)}"
         )
 
 async def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)):
@@ -1206,7 +1241,10 @@ async def reset_password(data: ResetPasswordRequest, request: Request):
     )
 
     await db.password_resets.delete_many({"email": email})
-    await revoke_user_devices(str(user["_id"]))
+    await revoke_user_devices(
+        str(user["_id"]),
+        keep_token=(data.push_token or "").strip() or None,
+    )
 
     user = await db.caregivers.find_one({"_id": user["_id"]})
     token = create_access_token({"sub": str(user["_id"])})
@@ -1245,7 +1283,7 @@ async def change_password(
         }},
     )
 
-    await revoke_user_devices(user_id)
+    await revoke_user_devices(user_id, keep_token=(data.push_token or "").strip() or None)
 
     user = await db.caregivers.find_one({"_id": ObjectId(user_id)})
     token = create_access_token({"sub": user_id})
@@ -1761,8 +1799,20 @@ async def send_push_to_tokens(
     Devuelve un resumen con los tickets de Expo para diagnóstico y elimina de
     `devices` los tokens que Expo reporte como DeviceNotRegistered."""
     valid = [t for t in tokens if isinstance(t, str) and t.startswith("ExponentPushToken")]
+    # Lo descartado se loguea: antes desaparecía en silencio y un "13 dispositivos
+    # / 12 enviados" no tenía explicación en los logs.
+    discarded = [t for t in tokens if t not in valid]
+    if discarded:
+        logging.warning(
+            f"[push:{label}] descartados={len(discarded)} tokens que no son Expo push tokens "
+            + "(" + ", ".join(
+                "..." + _token_tail(t) if isinstance(t, str) else f"tipo:{type(t).__name__}"
+                for t in discarded
+            ) + ")"
+        )
     if not valid:
-        return {"sent": 0, "tickets": [], "removed_tokens": []}
+        logging.warning(f"[push:{label}] ningún token válido: no se envía nada")
+        return {"sent": 0, "tickets": [], "removed_tokens": [], "receipt_ids": [], "discarded": len(discarded)}
 
     # channelId: canal Android "medication-reminders-v2" (importancia MAX, sonido
     # propio) que la app crea al pedir el permiso. En Android el sonido lo fija el
@@ -1853,6 +1903,7 @@ async def send_push_to_tokens(
         "tickets": tickets,
         "removed_tokens": removed,
         "receipt_ids": list(id_to_token.keys()),
+        "discarded": len(discarded),
     }
 
 # ============= SCHEDULER DE PUSH (FASE 3B) =============
