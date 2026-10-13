@@ -3779,6 +3779,11 @@ expo-file-system@~19.0.23:
   resolved "https://registry.yarnpkg.com/expo-file-system/-/expo-file-system-19.0.23.tgz#ad2c88ed039ba0fd5a739338818f42304171eddd"
   integrity sha512-MeGkid9OeNILfT/qonaXHp4f2c15xaB28U/bcN7pqZej0Kx0+6+V7e9ZIXpPHm07zVatxA+QkMTPQEGfmvVOxA==
 
+expo-file-system@~19.0.24:
+  version "19.0.24"
+  resolved "https://registry.yarnpkg.com/expo-file-system/-/expo-file-system-19.0.24.tgz#71e6872e1b7a41890f8631842e9f1e631846b5ae"
+  integrity sha512-hZs0Ng+coNjx7YJ8MPwfJpoU1SRul6OZ9LZycFzozUeoR+denbyr944YrMP9NVn+Zf1tdC7p0K0zgah3ZySOYg==
+
 expo-font@~14.0.11, expo-font@~14.0.12:
   version "14.0.12"
   resolved "https://registry.yarnpkg.com/expo-font/-/expo-font-14.0.12.tgz#ff8b176b3fee241e2ae5d3e2eabf3c783460b956"
@@ -3861,6 +3866,11 @@ expo-notifications@~0.32.16:
     expo-application "~7.0.8"
     expo-constants "~18.0.13"
 
+expo-print@~15.0.8:
+  version "15.0.8"
+  resolved "https://registry.yarnpkg.com/expo-print/-/expo-print-15.0.8.tgz#596c9f2302fb68d2db682f6f3e0c6596930b59dc"
+  integrity sha512-4O0Qzm0On5AmJIl9d+BT+ieTipFp658nHI4aX7vKEFPfj3dfQxG6rDJJpca+rrc9c4Ha8ZFYGvxJG5+4lFq2Pw==
+
 expo-router@~6.0.23:
   version "6.0.24"
   resolved "https://registry.yarnpkg.com/expo-router/-/expo-router-6.0.24.tgz#727d0c7c0055dbe9d590ad8fb9af978bb2a0dfd9"
@@ -3894,6 +3904,11 @@ expo-server@^1.0.7:
   version "1.0.7"
   resolved "https://registry.yarnpkg.com/expo-server/-/expo-server-1.0.7.tgz#fe700518f73651cb0736e79e3a4f2f8b2e2671b7"
   integrity sha512-mcmyML3oXcqFUXUxtdtCL1O00ztNI2v76d+MdniXRUgHNxIcHZ05zo+DqBaOOT6LQnPk4vA4YHqQl7iGUfRb3g==
+
+expo-sharing@~14.0.8:
+  version "14.0.8"
+  resolved "https://registry.yarnpkg.com/expo-sharing/-/expo-sharing-14.0.8.tgz#cfd5fcf77ab5f64cf3d192a40a925abb316d3545"
+  integrity sha512-A1pPr2iBrxypFDCWVAESk532HK+db7MFXbvO2sCV9ienaFXAk7lIBm6bkqgE6vzRd9O3RGdEGzYx80cYlc089Q==
 
 expo-splash-screen@~31.0.13:
   version "31.0.13"

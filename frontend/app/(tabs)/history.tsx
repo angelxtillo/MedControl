@@ -16,13 +16,16 @@ import { useRefreshOnResume } from '../../hooks/useRefreshOnResume';
 import api from '../../utils/api';
 import { hasMutatedSince } from '../../utils/mutations';
 import { format, isToday, isYesterday } from 'date-fns';
-import { es, enUS, ptBR, fr as frLocale } from 'date-fns/locale';
+import { es } from 'date-fns/locale';
+import { dateFnsLocales, dayFormats } from '../../utils/dates';
 import { useTranslation } from 'react-i18next';
 import i18n from '../../i18n';
+import { ExportHistoryModal } from '../../components/ExportHistoryModal';
 
 interface Patient {
   id: string;
   name: string;
+  age?: number;
 }
 
 interface Log {
@@ -50,16 +53,6 @@ const FILTER_BUTTONS: { key: StatusFilter; labelKey: string; activeColor: string
   { key: 'missed',  labelKey: 'history.filterMissed',  activeColor: '#f44336' },
 ];
 
-const dateFnsLocales: Record<string, typeof es> = { es, en: enUS, pt: ptBR, fr: frLocale };
-
-// Header de cada grupo de día; el año solo aparece cuando no es el año en curso.
-const dayFormats: Record<string, { sameYear: string; otherYear: string }> = {
-  es: { sameYear: "EEEE, d 'de' MMMM", otherYear: "EEEE, d 'de' MMMM 'de' yyyy" },
-  en: { sameYear: 'EEEE, MMMM d', otherYear: 'EEEE, MMMM d, yyyy' },
-  pt: { sameYear: "EEEE, d 'de' MMMM", otherYear: "EEEE, d 'de' MMMM 'de' yyyy" },
-  fr: { sameYear: 'EEEE d MMMM', otherYear: 'EEEE d MMMM yyyy' },
-};
-
 // Tinte suave + color de ícono/texto por estado — los mismos pares que usan
 // los badges de estadísticas del header, para que todo quede en una paleta.
 const STATUS_STYLES: Record<string, { icon: any; tint: string; iconColor: string; textColor: string }> = {
@@ -78,6 +71,7 @@ export default function History() {
   const [refreshing, setRefreshing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [showExport, setShowExport] = useState(false);
 
   const lastRefresh = useRef(0);
 
@@ -210,6 +204,8 @@ export default function History() {
     ? logs
     : logs.filter(log => log.status === statusFilter);
 
+  const selectedPatientObj = patients.find(p => p.id === selectedPatient);
+
   // Los logs llegan ordenados desc por scheduled_datetime; agrupar por día
   // preservando ese orden.
   const groupedLogs: { date: string; items: Log[] }[] = [];
@@ -250,6 +246,16 @@ export default function History() {
                   {logs.filter(l => l.status === 'skipped').length} {t('history.skipped')}
                 </Text>
               </View>
+              {selectedPatientObj && (
+                <TouchableOpacity
+                  style={styles.exportBadge}
+                  onPress={() => setShowExport(true)}
+                  accessibilityLabel={t('export.button')}
+                >
+                  <Ionicons name="document-text-outline" size={14} color="#1565C0" />
+                  <Text style={[styles.historyStatText, { color: '#1565C0' }]}>PDF</Text>
+                </TouchableOpacity>
+              )}
             </View>
             <ScrollView
               horizontal
@@ -362,6 +368,14 @@ export default function History() {
           )}
         </>
       )}
+      {selectedPatientObj && (
+        <ExportHistoryModal
+          visible={showExport}
+          onClose={() => setShowExport(false)}
+          patientId={selectedPatientObj.id}
+          patient={{ name: selectedPatientObj.name, age: selectedPatientObj.age }}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -389,6 +403,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     gap: 4,
+  },
+  exportBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    gap: 4,
+    backgroundColor: '#E3F2FD',
   },
   historyStatText: {
     fontSize: 13,

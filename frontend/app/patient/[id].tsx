@@ -23,6 +23,7 @@ import { markMutation, hasMutatedSince } from '../../utils/mutations';
 import { pickPatientPhoto } from '../../utils/patientPhoto';
 import { getApiErrorMessage } from '../../utils/errors';
 import CaregiversManager from '../../components/CaregiversManager';
+import { ExportHistoryModal } from '../../components/ExportHistoryModal';
 import { useTranslation } from 'react-i18next';
 import {
   DEFAULT_TIMEZONE,
@@ -58,6 +59,7 @@ export default function PatientDetail() {
   const { id } = useLocalSearchParams();
   const [patient, setPatient] = useState<Patient | null>(null);
   const [medications, setMedications] = useState<Medication[]>([]);
+  const [showExport, setShowExport] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   
   // Estado para el modal de edición
@@ -340,7 +342,19 @@ export default function PatientDetail() {
               </TouchableOpacity>
             )}
           </View>
+
+          <TouchableOpacity style={styles.exportButton} onPress={() => setShowExport(true)}>
+            <Ionicons name="document-text-outline" size={20} color="#2196F3" />
+            <Text style={styles.editPatientText}>{t('export.button')}</Text>
+          </TouchableOpacity>
         </View>
+
+        <ExportHistoryModal
+          visible={showExport}
+          onClose={() => setShowExport(false)}
+          patientId={id as string}
+          patient={{ name: patient.name, age: patient.age }}
+        />
 
         {/* Sección de Cuidadores */}
         <CaregiversManager
@@ -760,6 +774,15 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#2196F3',
+  },
+  exportButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: '#E3F2FD',
   },
   editPatientText: {
     color: '#2196F3',

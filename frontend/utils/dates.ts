@@ -2,6 +2,8 @@
  * Fechas "de calendario" (YYYY-MM-DD, sin hora ni zona) tal como las guarda el
  * backend en start_date / end_date.
  */
+import type { Locale } from 'date-fns';
+import { es, enUS, ptBR, fr as frLocale } from 'date-fns/locale';
 
 export const localeForLanguage = (lang: string): string =>
   lang === 'es' ? 'es-CO' :
@@ -33,3 +35,21 @@ export const startOfToday = (): Date => {
   const now = new Date();
   return new Date(now.getFullYear(), now.getMonth(), now.getDate());
 };
+
+export const dateFnsLocales: Record<string, Locale> = { es, en: enUS, pt: ptBR, fr: frLocale };
+
+/** Encabezado de un día del historial; el año solo hace falta fuera del año en curso. */
+export const dayFormats: Record<string, { sameYear: string; otherYear: string }> = {
+  es: { sameYear: "EEEE, d 'de' MMMM", otherYear: "EEEE, d 'de' MMMM 'de' yyyy" },
+  en: { sameYear: 'EEEE, MMMM d', otherYear: 'EEEE, MMMM d, yyyy' },
+  pt: { sameYear: "EEEE, d 'de' MMMM", otherYear: "EEEE, d 'de' MMMM 'de' yyyy" },
+  fr: { sameYear: 'EEEE d MMMM', otherYear: 'EEEE d MMMM yyyy' },
+};
+
+/** "12/10/26" (en: "10/12/26") */
+export const formatShortDate = (date: Date, lang: string): string =>
+  date.toLocaleDateString(localeForLanguage(lang), {
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit',
+  });
