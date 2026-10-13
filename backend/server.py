@@ -13,9 +13,13 @@ import re
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr, field_validator
 from typing import List, Optional
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from contextlib import asynccontextmanager
+from history import (
+    ensure_naive, should_show_today, med_baseline_local,
+    synthetic_missed, adherence_summary,
+)
 
 MISSED_GRACE_MINUTES = 30  # margen antes de marcar una dosis como "perdida"
 
@@ -567,14 +571,6 @@ def utc_now_naive() -> datetime:
     """Retorna datetime UTC naive para comparar con strings parseados (YYYY-MM-DDTHH:MM:SS)."""
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
-def ensure_naive(dt: datetime) -> datetime:
-    """Convierte datetime a naive UTC si es aware (motor puede devolver ambos)."""
-    if dt is None:
-        return None
-    if dt.tzinfo is not None:
-        return dt.replace(tzinfo=None)
-    return dt
-
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
@@ -694,33 +690,6 @@ async def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] =
 
     await ensure_token_not_revoked(user_id, payload.get("iat"))
     return user_id
-
-# ============= SCHEDULING HELPERS =============
-WEEKDAY_MAP = {
-    "lunes": 0, "martes": 1, "miércoles": 2, "miercoles": 2,
-    "jueves": 3, "viernes": 4, "sábado": 5, "sabado": 5,
-    "domingo": 6
-}
-
-def should_show_today(med: dict, weekday: int) -> bool:
-    frequency = med.get("frequency", "").lower()
-    day_names = ["lunes", "martes", "miércoles", "miercoles",
-                 "jueves", "viernes", "sábado", "sabado", "domingo"]
-    has_day_name = any(day in frequency for day in day_names)
-    if not has_day_name:
-        return True
-    for day_name, day_num in WEEKDAY_MAP.items():
-        if day_name in frequency and day_num == weekday:
-            return True
-    return False
-
-def med_baseline_local(med: dict, timezone_offset: int):
-    """Hora local desde la cual cuentan las dosis: cuando se creó o editó el medicamento."""
-    base = med.get("updated_at") or med.get("created_at")
-    if not base:
-        return None
-    base = ensure_naive(base)
-    return base + timedelta(minutes=timezone_offset)
 
 # ============= INVITATION HELPERS =============
 def generate_invitation_code() -> str:
@@ -2413,6 +2382,30 @@ async def logged_by_names(logs: list) -> dict:
     return {str(c["_id"]): c["name"] for c in caregivers}
 
 
+# Tope de logs reales por consulta de historial: 90 días × varias tomas
+# diarias supera con holgura el antiguo límite de 1000.
+HISTORY_LOG_LIMIT = 5000
+# El selector del PDF ofrece hasta 90 días; margen por desfase horario.
+REPORT_MAX_DAYS = 92
+
+
+def serialize_history_log(log: dict, med_name_by_id: dict, names: dict) -> dict:
+    return {
+        "id": str(log["_id"]),
+        "medication_id": log["medication_id"],
+        "medication_name": med_name_by_id.get(log["medication_id"], "Desconocido"),
+        "patient_id": log["patient_id"],
+        "scheduled_datetime": log["scheduled_datetime"],
+        "taken_datetime": log.get("taken_datetime"),
+        "status": log["status"],
+        "notes": log.get("notes"),
+        "logged_by": log.get("logged_by"),
+        "logged_by_name": names.get(log.get("logged_by")) or log.get("logged_by_name"),
+        "is_synthetic": False,
+        "created_at": log["created_at"].isoformat()
+    }
+
+
 @api_router.get("/logs/patient/{patient_id}")
 async def get_logs(
     patient_id: str,
@@ -2451,114 +2444,100 @@ async def get_logs(
 
     # --- include_missed=True: enrich with synthetic missed logs ---
     now_local = utc_now_naive() + timedelta(minutes=timezone_offset)
-    thirty_days_ago = (now_local - timedelta(days=30)).date().isoformat()
+    today = now_local.date()
+    thirty_days_ago = (today - timedelta(days=30)).isoformat()
 
     real_logs = await db.medication_logs.find({
         "patient_id": patient_id,
         "scheduled_datetime": {"$gte": thirty_days_ago}
-    }).sort("scheduled_datetime", -1).to_list(1000)
+    }).sort("scheduled_datetime", -1).to_list(HISTORY_LOG_LIMIT)
 
-    medications = await db.medications.find(
-        {"patient_id": patient_id, "active": True}
-    ).to_list(100)
-
+    # Todos los medicamentos para resolver nombres (los logs de uno desactivado
+    # no deben salir como "Desconocido"); solo los activos generan perdidas.
+    medications = await db.medications.find({"patient_id": patient_id}).to_list(None)
     med_name_by_id = {str(m["_id"]): m["name"] for m in medications}
 
-    # Build lookup set for efficiency — avoids O(n) scan per dose
     existing_keys = {
         (log["medication_id"], log["scheduled_datetime"])
         for log in real_logs
     }
-
     names = await logged_by_names(real_logs)
-    real_logs_out = [
-        {
-            "id": str(log["_id"]),
-            "medication_id": log["medication_id"],
-            "medication_name": med_name_by_id.get(log["medication_id"], "Desconocido"),
-            "patient_id": log["patient_id"],
-            "scheduled_datetime": log["scheduled_datetime"],
-            "taken_datetime": log.get("taken_datetime"),
-            "status": log["status"],
-            "notes": log.get("notes"),
-            "logged_by": log.get("logged_by"),
-            "logged_by_name": names.get(log.get("logged_by")) or log.get("logged_by_name"),
-            "is_synthetic": False,
-            "created_at": log["created_at"].isoformat()
-        }
-        for log in real_logs
-    ]
 
-    synthetic_missed = []
-
-    for med in medications:
-        med_id = str(med["_id"])
-        # Only generate missed from the medication's own start_date
-        med_start = datetime.fromisoformat(
-            med.get("start_date", (now_local - timedelta(days=30)).date().isoformat())
-        )
-        end_date_str = med.get("end_date")
-
-        for days_back in range(30):
-            check_dt = now_local - timedelta(days=days_back)
-            check_date = check_dt.date()
-            check_date_str = check_date.isoformat()
-
-            if check_date < med_start.date():
-                continue
-            if end_date_str and check_date_str > end_date_str:
-                continue
-            if not should_show_today(med, check_dt.weekday()):
-                continue
-
-            for time_slot in med.get("schedule_times", []):
-                try:
-                    parts = time_slot.split(":")
-                    normalized_time = (
-                        f"{parts[0].zfill(2)}:{parts[1].zfill(2)}"
-                        if len(parts) == 2 else time_slot
-                    )
-                except Exception:
-                    normalized_time = time_slot
-
-                scheduled_dt = f"{check_date_str}T{normalized_time}:00"
-
-                try:
-                    if datetime.fromisoformat(scheduled_dt) + timedelta(minutes=MISSED_GRACE_MINUTES) >= now_local:
-                        continue
-                except (ValueError, TypeError) as e:
-                    logger.warning(f"Error parsing scheduled_dt '{scheduled_dt}' in logs: {e}")
-                    continue
-
-                baseline = med_baseline_local(med, timezone_offset)
-                if baseline is not None:
-                    try:
-                        if datetime.fromisoformat(scheduled_dt) < baseline:
-                            continue
-                    except (ValueError, TypeError) as e:
-                        logger.warning(f"Error comparing baseline in logs: {e}")
-
-                if (med_id, scheduled_dt) in existing_keys:
-                    continue
-
-                synthetic_missed.append({
-                    "id": f"synthetic_{med_id}_{scheduled_dt}",
-                    "medication_id": med_id,
-                    "medication_name": med["name"],
-                    "patient_id": patient_id,
-                    "scheduled_datetime": scheduled_dt,
-                    "taken_datetime": None,
-                    "status": "missed",
-                    "notes": None,
-                    "logged_by": None,
-                    "logged_by_name": None,
-                    "is_synthetic": True,
-                    "created_at": scheduled_dt
-                })
-
-    all_logs = real_logs_out + synthetic_missed
+    all_logs = [serialize_history_log(log, med_name_by_id, names) for log in real_logs]
+    all_logs += synthetic_missed(
+        medications, existing_keys,
+        start=today - timedelta(days=29), end=today,
+        now_local=now_local, timezone_offset=timezone_offset,
+        grace_minutes=MISSED_GRACE_MINUTES, patient_id=patient_id,
+    )
     all_logs.sort(key=lambda x: x["scheduled_datetime"], reverse=True)
     return all_logs
+
+
+@api_router.get("/logs/patient/{patient_id}/report")
+async def get_logs_report(
+    patient_id: str,
+    from_date: str,
+    to_date: str,
+    timezone_offset: int = 0,
+    user_id: str = Depends(get_current_user)
+):
+    """Historial de un rango (hasta REPORT_MAX_DAYS días) con dosis perdidas y
+    adherencia por medicamento, para el PDF que se genera en el dispositivo.
+    Logs en orden cronológico ascendente."""
+    patient = await db.patients.find_one({
+        "_id": ObjectId(patient_id),
+        "caregiver_ids": user_id
+    }, {"_id": 1})
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    try:
+        start = date.fromisoformat(from_date)
+        end = date.fromisoformat(to_date)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Dates must be YYYY-MM-DD")
+
+    now_local = utc_now_naive() + timedelta(minutes=timezone_offset)
+    end = min(end, now_local.date())
+    if start > end:
+        raise HTTPException(status_code=422, detail="from_date must not be after to_date or today")
+    if (end - start).days + 1 > REPORT_MAX_DAYS:
+        raise HTTPException(status_code=422, detail=f"Range cannot exceed {REPORT_MAX_DAYS} days")
+
+    real_logs = await db.medication_logs.find({
+        "patient_id": patient_id,
+        "scheduled_datetime": {
+            "$gte": start.isoformat(),
+            "$lt": (end + timedelta(days=1)).isoformat(),
+        }
+    }).sort("scheduled_datetime", 1).to_list(HISTORY_LOG_LIMIT)
+    if len(real_logs) == HISTORY_LOG_LIMIT:
+        logger.warning(f"Report for patient {patient_id} hit HISTORY_LOG_LIMIT ({HISTORY_LOG_LIMIT})")
+
+    medications = await db.medications.find({"patient_id": patient_id}).to_list(None)
+    med_name_by_id = {str(m["_id"]): m["name"] for m in medications}
+
+    existing_keys = {
+        (log["medication_id"], log["scheduled_datetime"])
+        for log in real_logs
+    }
+    names = await logged_by_names(real_logs)
+
+    logs = [serialize_history_log(log, med_name_by_id, names) for log in real_logs]
+    logs += synthetic_missed(
+        medications, existing_keys, start=start, end=end,
+        now_local=now_local, timezone_offset=timezone_offset,
+        grace_minutes=MISSED_GRACE_MINUTES, patient_id=patient_id,
+    )
+    logs.sort(key=lambda x: x["scheduled_datetime"])
+
+    return {
+        "from_date": start.isoformat(),
+        "to_date": end.isoformat(),
+        "logs": logs,
+        **adherence_summary(medications, logs, start, end, timezone_offset),
+    }
 
 @api_router.post("/logs")
 async def create_log(log: MedicationLogCreate, user_id: str = Depends(get_current_user)):
