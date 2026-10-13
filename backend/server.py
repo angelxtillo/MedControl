@@ -20,6 +20,10 @@ from history import (
     ensure_naive, should_show_today, med_baseline_local,
     synthetic_missed, adherence_summary,
 )
+from terms import (
+    TERMS_VERSION, has_current_acceptance, acceptance_entry, acceptance_update,
+    legacy_acceptance_history,
+)
 
 MISSED_GRACE_MINUTES = 30  # margen antes de marcar una dosis como "perdida"
 
@@ -117,11 +121,6 @@ PASSWORD_RESET_MAX_ATTEMPTS = 5
 # interceptor del frontend cierra la sesión ante cualquier 401, así que este
 # texto es lo único que el usuario llega a ver del motivo.
 SESSION_REVOKED_DETAIL = "Tu contraseña cambió. Inicia sesión de nuevo."
-
-# Versión vigente de los Términos y Condiciones / Política de Privacidad
-# publicados en GitHub Pages. Se guarda por usuario al aceptar; si se publica
-# una revisión que exija re-aceptación, incrementar este valor.
-TERMS_VERSION = "1.0"
 
 def get_client_ip(request: Request) -> str:
     """Obtener IP real del cliente considerando proxies (Render)"""
@@ -264,6 +263,35 @@ async def lifespan(app: FastAPI):
             )
     except Exception as e:
         logging.warning(f"Medication muted_by migration warning: {e}")
+
+    # Migración historial de términos: los usuarios anteriores a
+    # terms_acceptances conservan su aceptación actual (la 1.0) como primera
+    # entrada, para no perder esa constancia cuando re-acepten (accept-terms
+    # hace $push). Corre antes de servir peticiones. Idempotente: solo toca
+    # usuarios sin el campo, y el filtro del update evita pisar un historial
+    # creado entre la lectura y la escritura.
+    try:
+        legacy_users = await db.caregivers.find(
+            {"terms_acceptances": {"$exists": False}, "accepted_terms_at": {"$ne": None}},
+            {"accepted_terms_at": 1, "terms_version": 1},
+        ).to_list(None)
+        migrated_terms = 0
+        for u in legacy_users:
+            history = legacy_acceptance_history(u)
+            if history is None:
+                continue
+            res = await db.caregivers.update_one(
+                {"_id": u["_id"], "terms_acceptances": {"$exists": False}},
+                {"$set": {"terms_acceptances": history}},
+            )
+            migrated_terms += res.modified_count
+        if migrated_terms:
+            logging.info(
+                f"Migración terms_acceptances: {migrated_terms} usuarios con su "
+                "aceptación previa como primera entrada del historial"
+            )
+    except Exception as e:
+        logging.warning(f"Terms acceptances migration warning: {e}")
 
     # Scheduler de push (Fase 3B): proceso interno cada minuto.
     # GUARD MULTI-WORKER: si algún día Render levanta varios workers
@@ -864,8 +892,10 @@ async def send_password_reset_email(to_email: str, code: str) -> bool:
 def public_user(user: dict) -> dict:
     """Representación del usuario para el frontend. Incluye el estado de
     aceptación de términos para que la app sepa si debe mostrar el gate de
-    aceptación (usuarios antiguos sin accepted_terms_at)."""
-    accepted_at = user.get("accepted_terms_at")
+    aceptación. accepted_terms_at va a None si el usuario nunca aceptó o si
+    aceptó una versión anterior a TERMS_VERSION: así la app ya publicada (cuyo
+    gate solo mira ese campo) pide re-aceptar sin necesitar un build nuevo."""
+    accepted_at = user.get("accepted_terms_at") if has_current_acceptance(user) else None
     return {
         "id": str(user["_id"]),
         "name": user["name"],
@@ -899,14 +929,16 @@ async def register(caregiver: CaregiverCreate, request: Request):
         raise HTTPException(status_code=400, detail="Email already registered")
 
     # Create user with email_verified=False
+    now = datetime.now(timezone.utc)
     user_dict = {
         "name": caregiver.name,
         "email": email,
         "password_hash": hash_password(caregiver.password),
         "email_verified": False,
-        "accepted_terms_at": datetime.now(timezone.utc),
+        "accepted_terms_at": now,
         "terms_version": TERMS_VERSION,
-        "created_at": datetime.now(timezone.utc)
+        "terms_acceptances": [acceptance_entry(now)],
+        "created_at": now
     }
     result = await db.caregivers.insert_one(user_dict)
 
@@ -1283,16 +1315,16 @@ async def accept_terms(user_id: str = Depends(get_current_user)):
     """Registra la aceptación de Términos y Condiciones + Política de Privacidad
     para un usuario ya autenticado. Lo usan los usuarios EXISTENTES que se
     registraron antes de que la aceptación fuera obligatoria: la app les muestra
-    un gate bloqueante y llama aquí. Idempotente: siempre deja la aceptación
-    fijada a la versión vigente."""
+    un gate bloqueante y llama aquí. También para la re-aceptación cuando sube
+    TERMS_VERSION. Deja la aceptación fijada a la versión vigente y agrega una
+    entrada a terms_acceptances (constancia de cada aceptación; nunca se borra)."""
     user = await db.caregivers.find_one({"_id": ObjectId(user_id)})
     if not user:
         raise HTTPException(status_code=404, detail="Cuidador no encontrado")
 
     accepted_at = datetime.now(timezone.utc)
     await db.caregivers.update_one(
-        {"_id": ObjectId(user_id)},
-        {"$set": {"accepted_terms_at": accepted_at, "terms_version": TERMS_VERSION}},
+        {"_id": ObjectId(user_id)}, acceptance_update(accepted_at)
     )
     return {
         "accepted_terms_at": accepted_at.isoformat(),
