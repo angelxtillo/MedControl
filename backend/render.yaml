@@ -14,8 +14,12 @@ services:
         value: medcontrol_prod
       - key: JWT_SECRET
         generateValue: true
-      # Remitente de los correos (SendGrid Single Sender verificado).
-      # NOTA: debe estar verificado en SendGrid antes de que envie.
-      - key: SENDGRID_FROM_EMAIL
-        value: soporte@dosaria.org
-      # SENDGRID_API_KEY es secreto: se gestiona solo en el dashboard de Render (no en este blueprint).
+      # Remitente de los correos (Resend). Formato "Nombre <correo>"; el
+      # dominio dosaria.org debe estar verificado en Resend.
+      - key: EMAIL_FROM
+        value: Dosaria <soporte@dosaria.org>
+      # RESEND_API_KEY: clave de la API de Resend (plan gratuito: 3.000
+      # correos/mes, 100/dia). Es secreto: se gestiona solo en el dashboard
+      # de Render, nunca en este blueprint.
+      - key: RESEND_API_KEY
+        sync: false

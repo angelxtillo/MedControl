@@ -64,8 +64,6 @@ from bson.errors import InvalidId
 from pymongo.errors import DuplicateKeyError
 import time
 from collections import defaultdict
-import sendgrid
-from sendgrid.helpers.mail import Mail
 import secrets
 import string
 import httpx
@@ -90,8 +88,12 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # reservado exclusivamente para "autenticado pero sin permiso".
 security = HTTPBearer(auto_error=False)
 ALGORITHM = "HS256"
-SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY", "")
-SENDGRID_FROM_EMAIL = os.environ.get("SENDGRID_FROM_EMAIL", "")
+# Correo transaccional vía Resend (API HTTP). EMAIL_FROM incluye el nombre
+# visible, p. ej. "Dosaria <soporte@dosaria.org>"; el dominio debe estar
+# verificado en Resend.
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
+EMAIL_FROM = os.environ.get("EMAIL_FROM", "")
+RESEND_API_URL = "https://api.resend.com/emails"
 
 # Rate limiting (simple in-memory)
 rate_limit_store = defaultdict(list)
@@ -719,6 +721,64 @@ async def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] =
     await ensure_token_not_revoked(user_id, payload.get("iat"))
     return user_id
 
+# ============= EMAIL (RESEND) =============
+async def send_email(to_email: str, subject: str, html: str, tag: str = "send_email") -> bool:
+    """Envía un correo por la API HTTP de Resend. Devuelve True si Resend lo
+    aceptó. Nunca lanza: los llamadores deciden qué decir al usuario, y los
+    detalles (status, mensaje de Resend) quedan solo en el log. La clave jamás
+    se loguea."""
+    if not RESEND_API_KEY or not EMAIL_FROM:
+        logging.error(
+            f"[{tag}] Envío a {to_email} cancelado: falta configuración "
+            f"(RESEND_API_KEY definida={bool(RESEND_API_KEY)}, EMAIL_FROM definido={bool(EMAIL_FROM)})"
+        )
+        return False
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as http:
+            response = await http.post(
+                RESEND_API_URL,
+                headers={"Authorization": f"Bearer {RESEND_API_KEY}"},
+                json={
+                    "from": EMAIL_FROM,
+                    "to": [to_email],
+                    "subject": subject,
+                    "html": html,
+                },
+            )
+    except httpx.HTTPError as e:
+        logging.error(f"[{tag}] Error de red enviando a {to_email} vía Resend: {type(e).__name__}: {e}")
+        return False
+
+    if response.is_success:
+        try:
+            email_id = response.json().get("id")
+        except ValueError:
+            email_id = None
+        logging.info(f"[{tag}] Resend OK status={response.status_code} id={email_id} para {to_email}")
+        return True
+
+    # Resend responde {"statusCode", "name", "message"} en los errores.
+    try:
+        body = response.json()
+        error_name = body.get("name")
+        error_message = body.get("message")
+    except ValueError:
+        error_name = None
+        error_message = response.text[:500]
+
+    if response.status_code == 429:
+        logging.error(
+            f"[{tag}] Resend 429 para {to_email}: LÍMITE DE ENVÍO ALCANZADO "
+            "(plan gratuito: 100 correos/día, 3.000/mes; o límite de peticiones/segundo). "
+            f"El correo NO se envió. name={error_name!r} message={error_message!r}"
+        )
+    else:
+        logging.error(
+            f"[{tag}] Resend error status={response.status_code} para {to_email}: "
+            f"name={error_name!r} message={error_message!r}"
+        )
+    return False
+
 # ============= INVITATION HELPERS =============
 def generate_invitation_code() -> str:
     chars = string.ascii_uppercase + string.digits
@@ -730,9 +790,7 @@ async def send_invitation_email(
     patient_name: str,
     code: str
 ) -> bool:
-    try:
-        sg = sendgrid.SendGridAPIClient(api_key=SENDGRID_API_KEY)
-        html_content = f"""
+    html_content = f"""
         <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px;">
           <div style="background: #2196F3; padding: 20px; border-radius: 12px 12px 0 0; text-align: center;">
             <h1 style="color: white; margin: 0;">&#128138; Dosaria</h1>
@@ -759,27 +817,16 @@ async def send_invitation_email(
           </div>
         </div>
         """
-        message = Mail(
-            from_email=SENDGRID_FROM_EMAIL,
-            to_emails=to_email,
-            subject=f"Dosaria: {inviter_name} te invita a cuidar a {patient_name}",
-            html_content=html_content
-        )
-        response = sg.send(message)
-        return response.status_code in [200, 202]
-    except Exception as e:
-        print(f"SendGrid error: {e}")
-        return False
+    return await send_email(
+        to_email,
+        f"Dosaria: {inviter_name} te invita a cuidar a {patient_name}",
+        html_content,
+        tag="send_invitation_email",
+    )
 
 async def send_verification_email(to_email: str, code: str) -> bool:
     """Enviar código de verificación de email"""
-    try:
-        logging.info(
-            f"[send_verification_email] Iniciando envío a {to_email} "
-            f"(from={SENDGRID_FROM_EMAIL!r}, api_key_set={bool(SENDGRID_API_KEY)})"
-        )
-        sg = sendgrid.SendGridAPIClient(api_key=SENDGRID_API_KEY)
-        html_content = f"""
+    html_content = f"""
         <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px;">
           <div style="background: #2196F3; padding: 20px; border-radius: 12px 12px 0 0; text-align: center;">
             <h1 style="color: white; margin: 0;">&#128138; Dosaria</h1>
@@ -799,30 +846,12 @@ async def send_verification_email(to_email: str, code: str) -> bool:
           </div>
         </div>
         """
-        message = Mail(
-            from_email=SENDGRID_FROM_EMAIL,
-            to_emails=to_email,
-            subject="Dosaria: Verifica tu correo electrónico",
-            html_content=html_content
-        )
-        response = sg.send(message)
-        ok = response.status_code in [200, 202]
-        if ok:
-            logging.info(
-                f"[send_verification_email] SendGrid OK status={response.status_code} para {to_email}"
-            )
-        else:
-            logging.error(
-                f"[send_verification_email] SendGrid respuesta NO-OK status={response.status_code} "
-                f"para {to_email} body={getattr(response, 'body', None)!r}"
-            )
-        return ok
-    except Exception as e:
-        logging.error(
-            f"[send_verification_email] EXCEPCIÓN enviando a {to_email}: {e}",
-            exc_info=True,
-        )
-        return False
+    return await send_email(
+        to_email,
+        "Dosaria: Verifica tu correo electrónico",
+        html_content,
+        tag="send_verification_email",
+    )
 
 async def send_password_reset_email(to_email: str, code: str) -> bool:
     """Enviar código para restablecer la contraseña.
@@ -830,13 +859,7 @@ async def send_password_reset_email(to_email: str, code: str) -> bool:
     Plantilla propia en vez de reutilizar send_verification_email: ese correo
     habla de "verifica tu correo" y "gracias por registrarte", que en un
     restablecimiento desorienta y hace más difícil detectar un intento ajeno."""
-    try:
-        logging.info(
-            f"[send_password_reset_email] Iniciando envío a {to_email} "
-            f"(from={SENDGRID_FROM_EMAIL!r}, api_key_set={bool(SENDGRID_API_KEY)})"
-        )
-        sg = sendgrid.SendGridAPIClient(api_key=SENDGRID_API_KEY)
-        html_content = f"""
+    html_content = f"""
         <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px;">
           <div style="background: #2196F3; padding: 20px; border-radius: 12px 12px 0 0; text-align: center;">
             <h1 style="color: white; margin: 0;">&#128138; Dosaria</h1>
@@ -863,30 +886,12 @@ async def send_password_reset_email(to_email: str, code: str) -> bool:
           </div>
         </div>
         """
-        message = Mail(
-            from_email=SENDGRID_FROM_EMAIL,
-            to_emails=to_email,
-            subject="Dosaria: Restablece tu contraseña",
-            html_content=html_content
-        )
-        response = sg.send(message)
-        ok = response.status_code in [200, 202]
-        if ok:
-            logging.info(
-                f"[send_password_reset_email] SendGrid OK status={response.status_code} para {to_email}"
-            )
-        else:
-            logging.error(
-                f"[send_password_reset_email] SendGrid respuesta NO-OK status={response.status_code} "
-                f"para {to_email} body={getattr(response, 'body', None)!r}"
-            )
-        return ok
-    except Exception as e:
-        logging.error(
-            f"[send_password_reset_email] EXCEPCIÓN enviando a {to_email}: {e}",
-            exc_info=True,
-        )
-        return False
+    return await send_email(
+        to_email,
+        "Dosaria: Restablece tu contraseña",
+        html_content,
+        tag="send_password_reset_email",
+    )
 
 # ============= AUTH ENDPOINTS =============
 def public_user(user: dict) -> dict:
